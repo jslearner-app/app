@@ -78,10 +78,10 @@ export default function History() {
     <div data-testid="history-page">
       <PageHeader eyebrow="Audit trail" title="History" description="Every statement conversion and payout split, ready to re-export." />
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
-        <div className="inline-flex rounded-lg border border-slate-800 bg-slate-900/50 p-1">
+        <div className="inline-flex max-w-full overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/50 p-1">
           {KINDS.map((k) => (
             <button key={k.id} onClick={() => setKind(k.id)} data-testid={`history-filter-${k.id}`}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${kind === k.id ? "bg-slate-800 text-slate-50" : "text-slate-400 hover:text-slate-200"}`}>
+              className={`inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-md text-sm transition-colors ${kind === k.id ? "bg-slate-800 text-slate-50" : "text-slate-400 hover:text-slate-200"}`}>
               {k.label}
               {k.id === "needs_review" && reviewCount > 0 && (
                 <span className="rounded-full bg-amber-400/15 border border-amber-400/40 px-1.5 text-[11px] font-semibold num text-amber-300" data-testid="history-review-count">{reviewCount}</span>
@@ -129,7 +129,7 @@ export default function History() {
               </tr>
             ))}
             {items && !items.length && (
-              <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-500" data-testid="history-empty-state">No conversions yet. Head to the Dashboard to process your first file.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-500" data-testid="history-empty-state">{kind === "needs_review" ? "No statements need review. Everything reconciles." : "No conversions yet. Head to the Dashboard to process your first file."}</td></tr>
             )}
           </tbody>
         </table>

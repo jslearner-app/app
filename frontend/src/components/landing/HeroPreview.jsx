@@ -15,6 +15,7 @@ export const HeroPreview = () => (
         <span className="text-xs text-slate-300 font-medium">burger-shack-sept.pdf</span>
         <span className="ml-auto text-[10px] uppercase tracking-wider text-slate-500">3 pages · 41 txns</span>
       </div>
+      <div className="overflow-x-auto">
       <table className="w-full text-[12px] font-mono">
         <thead>
           <tr className="text-slate-500 text-[10px] uppercase tracking-wider">
@@ -35,6 +36,7 @@ export const HeroPreview = () => (
           ))}
         </tbody>
       </table>
+      </div>
     </div>
     <div className="relative -mt-6 ml-6 sm:ml-16 mr-2 rounded-xl border border-emerald-500/30 bg-[#0b132b] p-4 shadow-xl shadow-black/40">
       <div className="flex items-center justify-between gap-2">

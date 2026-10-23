@@ -53,7 +53,7 @@ export default function Landing() {
       </header>
 
       <section className="relative overflow-hidden grid-bg noise border-b border-slate-800/70">
-        <div className="relative max-w-7xl mx-auto px-5 sm:px-8 lg:px-16 pt-16 sm:pt-24 pb-20 grid gap-14 lg:grid-cols-[1.05fr_1fr] items-center">
+        <div className="relative max-w-7xl mx-auto px-5 sm:px-8 lg:px-16 pt-16 sm:pt-24 pb-20 grid grid-cols-1 gap-14 lg:grid-cols-[1.05fr_1fr] items-center [&>*]:min-w-0">
           <div>
             <div className="reveal eyebrow mb-5">For bookkeeping & CPA firms</div>
             <h1 className="reveal text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.05] text-slate-50" style={{ animationDelay: "60ms" }}>

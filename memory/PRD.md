@@ -31,7 +31,8 @@ CPA firm founders cleaning restaurant backlogs; solo virtual e-commerce bookkeep
 - 2026-10-23: Statement reconciliation check (opening + deposits - withdrawals vs printed running/closing balance; mismatched rows highlighted; recomputed on row edits). AWS keys requested via secure card; user skipped, so Textract is still not connected
 - 2026-10-23: History shows a reconciliation badge per statement (Reconciled / Needs review / No balance column)
 - 2026-10-23: History "Needs review" filter (statements with reconciliation mismatch; combines with client filter)
-- Tested: iteration_1 (backend 23/23; frontend flows incl. real Stripe test checkout)
+- 2026-10-23: Review count badges (sidebar History + Needs review filter, live updates); landing SEO (meta/OG/Twitter, schema.org SoftwareApplication JSON-LD, keyword alt text, new hero copy, Use Cases H2/H3 section, robots.txt, fonts moved to preconnected link)
+- Tested: iteration_1, iteration_2 (backend 23/23; frontend flows incl. real Stripe test checkout)
 
 ## Backlog
 - P0: Add AWS keys and verify live Textract parsing on real statements

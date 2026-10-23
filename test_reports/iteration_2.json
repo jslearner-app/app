@@ -1,0 +1,31 @@
+{
+  "summary": "Tested the Review Count Badge (API plus sidebar and History UI, including live updates after delete) and landing-page SEO (head meta, JSON-LD, H1/subheadline, Use Cases H2/H3s, alt text, fonts, robots.txt, mobile layout). Also ran a regression smoke on login, dashboard, clients and splitter. All requested features work. One mobile layout bug: at 390px the hero column is 379px wide (x=20 to 399), so the right edge of the H1 and subheadline is clipped by the section's overflow-hidden.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Landing hero (mobile 390px)", "issue": "The hero grid has no explicit column on mobile, so the implicit auto column grows to the min-content width of the hero-product-preview table (379px). The left column spans x=20 to 399 in a 390px viewport. The section's overflow-hidden hides the overflow, so document scrollWidth stays at 390, but 'Ingestion' in the H1 and the ends of subheadline lines (e.g. '(Toast') are cut off with no right padding. Fix: add 'grid-cols-1' to the hero grid div (Landing.jsx line 56) and/or 'min-w-0' on its children, and let the preview table scroll inside an overflow-x-auto wrapper.", "selector": "h1, [data-testid=hero-subheadline], [data-testid=hero-product-preview]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "History > Needs review filter", "issues": ["When the filter has no results, the empty state still says 'No conversions yet. Head to the Dashboard to process your first file.' This is misleading when other statements exist. Show a filter-specific message such as 'No statements need review'."]},
+      {"screen": "History (mobile 390px)", "issues": ["In the filter pill group, the 'Needs review' label wraps onto two lines. Minor."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_review_count.py", "/app/backend/tests/test_ledgerstream_api.py", "/app/test_reports/pytest/pytest_results_iter2.xml"],
+  "action_items": [
+    "Fix the mobile hero overflow in Landing.jsx: add grid-cols-1 to the hero grid and min-w-0 to its children, and wrap the preview table in overflow-x-auto.",
+    "Optional: show a filter-specific empty-state message for the History 'Needs review' filter."
+  ],
+  "critical_code_review_comments": [
+    "useReviewCount is used in both AppShell and History, so two separate requests go out on every History navigation and every delete. This is acceptable, but a shared context would avoid the duplicate calls.",
+    "Delete in History has no confirmation step; one click permanently removes the record (behaviour from before this iteration).",
+    "The JSON-LD uses @graph, which is valid schema.org. Tests must look inside @graph for the SoftwareApplication node."
+  ],
+  "updated_files": ["/app/backend/tests/test_review_count.py"],
+  "success_rate": {"backend": "100% (30/30, new and regression)", "frontend": "95% (all requested checks pass; mobile hero text is clipped)"},
+  "test_credentials": "demo@ledgerstream.ai / LedgerDemo#2026",
+  "seed_data_creation": "None created. Seeded stm_TESTbad1 and stm_TESTbad2 were deleted through the UI delete flow. stm_TESTok and 2 test_* users were cleaned up afterwards. The demo user now has 0 statements.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "To retest the badges, re-seed mismatch statements in db.statements with fields id, owner_id (demo user_id = user_a7e293d619d1), kind='statement', client_id, created_at and summary.reconciliation.status='mismatch'. The full document shape of the original seeds was saved to /tmp/seed_statements.json, which is ephemeral. The auth input testids are auth-email-input, auth-password-input and auth-submit-button. pytest.ini uses xdist (-n), so don't pass -p no:xdist."
+}
