@@ -15,6 +15,23 @@ const exportItem = (it) =>
     : downloadFile(`/payouts/${it.id}/qbo`, `qbo_journal_${it.platform}_${it.id.slice(-6)}.csv`)
   ).catch((e) => toast.error(errMsg(e)));
 
+const REC_BADGES = {
+  reconciled: { label: "Reconciled", cls: "border-emerald-500/40 bg-emerald-950 text-emerald-300" },
+  mismatch: { label: "Needs review", cls: "border-amber-500/40 bg-amber-950 text-amber-300" },
+  unavailable: { label: "No balance column", cls: "border-slate-700 bg-slate-900 text-slate-400" },
+};
+
+const RecBadge = ({ it }) => {
+  const status = it.kind === "statement" ? it.summary?.reconciliation?.status : null;
+  const badge = REC_BADGES[status];
+  if (!badge) return <span className="text-slate-600">—</span>;
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap ${badge.cls}`} data-testid={`history-rec-badge-${it.id}`} data-status={status}>
+      {badge.label}
+    </span>
+  );
+};
+
 const Details = ({ it }) =>
   it.kind === "statement" ? (
     <span>{it.pages} page(s) · {it.summary?.transactions} txns</span>
@@ -73,7 +90,7 @@ export default function History() {
         </Select>
       </div>
       <div className="surface overflow-x-auto">
-        <table className="w-full text-sm min-w-[760px]">
+        <table className="w-full text-sm min-w-[880px]">
           <thead>
             <tr className="text-[11px] uppercase tracking-wider text-slate-400 bg-[#16203a]">
               <th className="text-left px-4 py-3 font-semibold">Date</th>
@@ -81,6 +98,7 @@ export default function History() {
               <th className="text-left px-4 py-3 font-semibold">Client</th>
               <th className="text-left px-4 py-3 font-semibold">File</th>
               <th className="text-left px-4 py-3 font-semibold">Details</th>
+              <th className="text-left px-4 py-3 font-semibold">Reconciliation</th>
               <th className="text-right px-4 py-3 font-semibold">Actions</th>
             </tr>
           </thead>
@@ -95,6 +113,7 @@ export default function History() {
                 <td className="px-4 py-3 text-slate-200">{it.client_name}</td>
                 <td className="px-4 py-3 text-slate-300 max-w-[220px] truncate">{it.filename}</td>
                 <td className="px-4 py-3 text-slate-400 num text-xs"><Details it={it} /></td>
+                <td className="px-4 py-3"><RecBadge it={it} /></td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
                   <button onClick={() => exportItem(it)} className="p-2 rounded-md text-slate-400 hover:text-emerald-300 hover:bg-slate-800" data-testid={`history-export-${it.id}`} aria-label="Export"><Download className="h-4 w-4" /></button>
                   <button onClick={() => remove(it)} className="p-2 rounded-md text-slate-400 hover:text-rose-300 hover:bg-slate-800" data-testid={`history-delete-${it.id}`} aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
@@ -102,7 +121,7 @@ export default function History() {
               </tr>
             ))}
             {items && !items.length && (
-              <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500" data-testid="history-empty-state">No conversions yet. Head to the Dashboard to process your first file.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-500" data-testid="history-empty-state">No conversions yet. Head to the Dashboard to process your first file.</td></tr>
             )}
           </tbody>
         </table>
