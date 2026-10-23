@@ -1,0 +1,44 @@
+{
+  "summary": "First full E2E run of LedgerStream AI. Backend: 23/23 pytest pass (auth, clients CRUD, statements 503 w/o AWS + no page charge, Textract HMAC webhook -> pandas parse -> GET/PUT rows/CSV+XLSX export, payouts for all 5 sample CSVs balanced, DoorDash 272.65/81.80/190.85, recalc 15% -> 231.75/40.90, QBO CSV headers, edge cases 400/422/404, history filters/delete, billing summary/portal 400 for free, real Stripe checkout session creation, Stripe webhook invalid sig 400 on both paths, signed checkout.session.completed -> active_subscriber and customer.subscription.deleted -> free/trial, cross-user isolation 404). Frontend: landing trust signals/reviews/pricing badges, 390px no overflow, register/login/wrong-password/logout/protected redirect, client create/edit/delete, onboarding trust, textract banner, isolation badge, splitter full flow + downloads, history list/filter/export(xlsx)/delete, billing page, REAL Stripe sandbox checkout with 4242 card -> /payment/success -> plan starter + active_subscriber -> Customer Portal opened billing.stripe.com. Two bugs found: trial-gate redirect is not triggered while Textract is unconfigured, and brute-force lockout can be bypassed.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/auth/login", "issue": "Brute-force lockout is ineffective: identifier = f'{request.client.host}:{email}' uses the ingress/proxy pod IP, which varies per request (seen 10.227.0.134 and 10.227.0.136). Repro: 6 bad logins all return 401 (never 429), then the correct password returns 200. Fix: key by email only, or use the first X-Forwarded-For IP.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/webhooks/stripe customer.subscription.deleted", "issue": "The $or filter includes {'stripe_customer_id': obj.get('customer')}. If customer is null, this matches any user without a stripe_customer_id. Guard against null values."},
+      {"endpoint": "DELETE /api/clients/{id}", "issue": "Does not cascade or handle the client's statements and payouts, which become orphaned (they still appear in History)."},
+      {"endpoint": "GET /api/payments/status/{session_id}", "issue": "Unauthenticated. Any caller with a session id can trigger activation polling. Low risk, but consider requiring auth plus an owner check."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ConverterPanel.upload", "issue": "Trial gate: with pages_used=5 and Textract not configured, the upload only shows the toast 'Amazon Textract is not connected yet...' and does NOT redirect to /pricing?reason=trial_limit, because the engine.configured check runs before the page_limit check. Move the trial-limit check above the engine check. /pricing?reason=trial_limit itself renders trial-limit-banner correctly.", "selector": "[data-testid='pdf-upload-dropzone-input']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "History", "issues": ["Delete removes the item immediately with no confirmation dialog, unlike Client delete."]},
+      {"screen": "AppShell", "issues": ["nav-* data-testids are duplicated between the desktop and mobile sidebars, which makes test selectors ambiguous. Consider using mobile-nav-* for the mobile copy."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_ledgerstream_api.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Fix the login lockout identifier (use email, or the X-Forwarded-For client IP) so 5 failed attempts produce 429",
+    "In ConverterPanel.upload, check the trial page limit before the Textract-not-configured check so the redirect to /pricing?reason=trial_limit happens",
+    "Guard the customer.subscription.deleted handler against null customer or subscription ids",
+    "Optional: add a confirmation before History delete; decide on cascade behaviour for client delete"
+  ],
+  "critical_code_review_comments": [
+    "auth_routes.login: request.client.host is the proxy IP behind the k8s ingress, so the lockout is bypassable",
+    "billing_routes webhook: the $or filter with possibly-None values can match unintended users",
+    "workspace_routes.convert_statement: the 503 is returned before the upload is read or pages are reserved, which is correct (pages_used verified unchanged)",
+    "Textract webhook looks statements up by id only (no owner), which is acceptable because it is HMAC-protected"
+  ],
+  "updated_files": ["/app/backend/tests/test_ledgerstream_api.py"],
+  "success_rate": {"backend": "100% (23/23 pytest); lockout bug found via a separate script", "frontend": "~95% (1 trial-gate redirect bug)"},
+  "test_credentials": "demo@ledgerstream.ai / LedgerDemo#2026 works",
+  "seed_data_creation": "Temporary TEST users/clients/statements/payouts were created and all deleted. The Stripe test subscription created via real checkout was cancelled. Demo user reset to plan=free, subscription_status=trial, pages_used=0 (2 seeded clients intact).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_ledgerstream_api.py -n 0. Tests insert statements directly into Mongo, sign Textract/Stripe webhooks with secrets from backend/.env, and clean up after themselves. Stripe Checkout uses managed payments (Link UI): click the 'Card' radio (mouse ~1076,424 at 1920x1080), then fill #cardNumber/#cardExpiry/#cardCvc/#billingName, click 'Enter address manually', fill #billingAddressLine1/#billingLocality/#billingPostalCode/#billingAdministrativeArea, uncheck #enableStripePass and submit. The full flow works. Cancel the subscription afterwards.",
+  "rca of the issue": "Lockout: identifier includes request.client.host, which is the ingress pod IP and rotates between replicas, so failure counts are split across keys and locked_until is set on a key that the next request may not hit. Trial gate: ConverterPanel.upload returns early on the engine-not-configured check before evaluating user.pages_used >= page_limit."
+}

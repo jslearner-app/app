@@ -66,7 +66,8 @@ async def register(body: RegisterIn, response: Response):
 @router.post("/login")
 async def login(body: LoginIn, request: Request, response: Response):
     email = body.email.lower()
-    identifier = f"{request.client.host if request.client else 'unknown'}:{email}"
+    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    identifier = f"{forwarded or (request.client.host if request.client else 'unknown')}:{email}"
     attempt = await db.login_attempts.find_one({"identifier": identifier}, {"_id": 0})
     if attempt and attempt.get("locked_until"):
         locked_until = attempt["locked_until"]

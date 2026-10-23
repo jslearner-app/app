@@ -146,8 +146,11 @@ async def stripe_webhook(request: Request):
         await db.payment_transactions.update_one({"session_id": obj["id"]},
                                                  {"$set": {"status": status, "payment_status": status, "updated_at": now()}})
     elif t == "customer.subscription.deleted":
+        match = [{"stripe_subscription_id": obj["id"]}]
+        if obj.get("customer"):
+            match.append({"stripe_customer_id": obj["customer"]})
         await db.users.update_one(
-            {"$or": [{"stripe_subscription_id": obj["id"]}, {"stripe_customer_id": obj.get("customer")}]},
+            {"$or": match},
             {"$set": {"plan": "free", "subscription_status": "trial", "plan_updated_at": now()}},
         )
     logger.info("Stripe webhook processed: %s", t)

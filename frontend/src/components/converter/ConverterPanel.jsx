@@ -37,8 +37,8 @@ export const ConverterPanel = ({ clients, onConverted }) => {
 
   const upload = async (file) => {
     if (!clientId) return toast.error("Select a client profile first");
-    if (engine && !engine.configured) return toast.error("Amazon Textract is not connected yet. Add your AWS keys to enable PDF parsing.");
     if (user.page_limit && user.pages_used >= user.page_limit) return navigate("/pricing?reason=trial_limit");
+    if (engine && !engine.configured) return toast.error("Amazon Textract is not connected yet. Add your AWS keys to enable PDF parsing.");
     setParsing(file.name);
     const form = new FormData();
     form.append("file", file);
