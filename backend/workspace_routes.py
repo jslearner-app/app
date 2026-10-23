@@ -304,6 +304,12 @@ async def history(client_id: Optional[str] = None, kind: Optional[str] = None, u
     return sorted(items, key=lambda x: x["created_at"], reverse=True)
 
 
+@router.get("/history/review-count")
+async def review_count(user: dict = Depends(get_current_user)):
+    n = await db.statements.count_documents({"owner_id": user["user_id"], "summary.reconciliation.status": "mismatch"})
+    return {"needs_review": n}
+
+
 @router.delete("/history/{kind}/{item_id}")
 async def delete_history(kind: str, item_id: str, user: dict = Depends(get_current_user)):
     coll = {"statement": db.statements, "payout": db.payouts}.get(kind)

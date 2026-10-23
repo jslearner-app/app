@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { api, downloadFile, errMsg } from "@/lib/api";
 import { money } from "@/lib/format";
+import { notifyHistoryChanged } from "@/hooks/useReviewCount";
 
 const COLS = [
   { key: "date", label: "Date" },
@@ -51,6 +52,7 @@ export const StatementGrid = ({ statement, onSaved }) => {
       const { data } = await api.put(`/statements/${statement.id}/rows`, { rows });
       setRows(data.rows);
       onSaved(data);
+      notifyHistoryChanged();
       setEditing(false);
       toast.success("Changes saved");
     } catch (e) {

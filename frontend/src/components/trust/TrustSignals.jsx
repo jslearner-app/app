@@ -1,10 +1,10 @@
 import { Lock, Quote, ServerCog, ShieldCheck, Timer, CreditCard } from "lucide-react";
 
 const PLATFORM_BADGES = [
-  { id: "shopify", title: "Shopify compatible", sub: "Direct CSV Ingestion Pipeline", logo: "/logos/shopify.svg" },
-  { id: "doordash", title: "DoorDash Data Partner", sub: "Automated Fee & Commission Parsing", logo: "/logos/doordash.svg" },
-  { id: "ubereats", title: "UberEats Ready", sub: "Instant Settlement Breakdown", logo: "/logos/ubereats.svg" },
-  { id: "toast", title: "Toast Ecosystem", sub: "POS Daily Clearing Reconciliation", logo: "/logos/toast.svg" },
+  { id: "shopify", title: "Shopify compatible", sub: "Direct CSV Ingestion Pipeline", logo: "/logos/shopify.svg", alt: "Shopify logo - Shopify payout CSV to QuickBooks journal entry" },
+  { id: "doordash", title: "DoorDash Data Partner", sub: "Automated Fee & Commission Parsing", logo: "/logos/doordash.svg", alt: "DoorDash logo - DoorDash payout CSV parser for bookkeepers" },
+  { id: "ubereats", title: "UberEats Ready", sub: "Instant Settlement Breakdown", logo: "/logos/ubereats.svg", alt: "UberEats logo - QuickBooks Online restaurant payout splitter" },
+  { id: "toast", title: "Toast Ecosystem", sub: "POS Daily Clearing Reconciliation", logo: "/logos/toast.svg", alt: "Toast logo - Toast journal entry breakdown tool" },
 ];
 
 const REVIEWS = [
@@ -40,7 +40,7 @@ export const TrustBadgesRow = ({ compact = false }) => (
         style={{ animationDelay: `${i * 80}ms` }}
         className={`reveal group surface ${compact ? "p-4" : "p-5 sm:p-6"} hover:border-emerald-500/40 transition-colors duration-200`}
       >
-        <img src={b.logo} alt={`${b.title} logo`} width="28" height="28" loading="lazy" className="h-7 w-7 opacity-80 group-hover:opacity-100 transition-opacity" />
+        <img src={b.logo} alt={b.alt} width="28" height="28" loading="lazy" className="h-7 w-7 opacity-80 group-hover:opacity-100 transition-opacity" />
         <div className="mt-4 font-display font-semibold text-sm sm:text-base text-slate-100">{b.title}</div>
         <div className="mt-1 text-xs sm:text-sm text-slate-400">{b.sub}</div>
       </div>

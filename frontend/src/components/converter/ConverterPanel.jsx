@@ -12,6 +12,7 @@ import { IsolationBadge } from "@/components/trust/TrustSignals";
 import { ParsingLoader } from "./ParsingLoader";
 import { StatementGrid } from "./StatementGrid";
 import { ReconciliationBanner } from "./ReconciliationBanner";
+import { notifyHistoryChanged } from "@/hooks/useReviewCount";
 
 const Stat = ({ label, value, testId, tone = "text-slate-50" }) => (
   <div className="surface px-4 py-3">
@@ -49,6 +50,7 @@ export const ConverterPanel = ({ clients, onConverted }) => {
       setStatement(res.data);
       toast.success(`${res.data.summary.transactions} transactions extracted from ${res.data.pages} page(s)`);
       onConverted?.();
+      notifyHistoryChanged();
     } catch (e) {
       if (e.response?.status === 402) {
         toast.error(errMsg(e));

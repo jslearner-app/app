@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/s
 import { Brand } from "@/components/common/Brand";
 import { useAuth } from "@/context/AuthContext";
 import { UsageMeter } from "@/components/billing/UsageMeter";
+import { useReviewCount } from "@/hooks/useReviewCount";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, id: "dashboard" },
@@ -16,6 +17,7 @@ const NAV = [
 const SidebarBody = ({ onNavigate }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const reviewCount = useReviewCount();
   const handleLogout = async () => {
     await logout();
     navigate("/login");
@@ -40,6 +42,15 @@ const SidebarBody = ({ onNavigate }) => {
           >
             <n.icon className="h-4 w-4" />
             {n.label}
+            {n.id === "history" && reviewCount > 0 && (
+              <span
+                className="ml-auto min-w-[22px] rounded-full bg-amber-400/15 border border-amber-400/40 px-1.5 py-0.5 text-center text-[11px] font-semibold num text-amber-300"
+                title={`${reviewCount} statement(s) need review`}
+                data-testid="nav-history-review-count"
+              >
+                {reviewCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

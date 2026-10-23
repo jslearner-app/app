@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { api, downloadFile, errMsg } from "@/lib/api";
 import { money, platformName, shortDate } from "@/lib/format";
 import { useClients } from "@/hooks/useClients";
+import { notifyHistoryChanged, useReviewCount } from "@/hooks/useReviewCount";
 import { PageHeader } from "@/components/common/PageHeader";
 
 const KINDS = [{ id: "all", label: "All" }, { id: "statement", label: "Statements" }, { id: "payout", label: "Payouts" }, { id: "needs_review", label: "Needs review" }];
@@ -44,6 +45,7 @@ export default function History() {
   const [clientId, setClientId] = useState("all");
   const [kind, setKind] = useState("all");
   const [items, setItems] = useState(null);
+  const reviewCount = useReviewCount();
 
   const load = useCallback(async () => {
     const params = {};
@@ -66,6 +68,7 @@ export default function History() {
       await api.delete(`/history/${it.kind}/${it.id}`);
       toast.success("Removed from history");
       load();
+      notifyHistoryChanged();
     } catch (e) {
       toast.error(errMsg(e));
     }
@@ -78,7 +81,12 @@ export default function History() {
         <div className="inline-flex rounded-lg border border-slate-800 bg-slate-900/50 p-1">
           {KINDS.map((k) => (
             <button key={k.id} onClick={() => setKind(k.id)} data-testid={`history-filter-${k.id}`}
-              className={`px-3 py-1.5 rounded-md text-sm transition-colors ${kind === k.id ? "bg-slate-800 text-slate-50" : "text-slate-400 hover:text-slate-200"}`}>{k.label}</button>
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${kind === k.id ? "bg-slate-800 text-slate-50" : "text-slate-400 hover:text-slate-200"}`}>
+              {k.label}
+              {k.id === "needs_review" && reviewCount > 0 && (
+                <span className="rounded-full bg-amber-400/15 border border-amber-400/40 px-1.5 text-[11px] font-semibold num text-amber-300" data-testid="history-review-count">{reviewCount}</span>
+              )}
+            </button>
           ))}
         </div>
         <Select value={clientId} onValueChange={setClientId}>

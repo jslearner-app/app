@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, FileSpreadsheet, Scale } from "lucide-react";
 import { Brand } from "@/components/common/Brand";
@@ -5,6 +6,9 @@ import { useAuth } from "@/context/AuthContext";
 import { TrustBadgesRow, CaseStudyReviews, SecurityStrip } from "@/components/trust/TrustSignals";
 import { PricingMatrix } from "@/components/billing/PricingMatrix";
 import { HeroPreview } from "@/components/landing/HeroPreview";
+import { UseCases } from "@/components/landing/UseCases";
+
+const PAGE_TITLE = "LedgerStream AI | The Financial Ingestion Hub for Modern Bookkeepers";
 
 const Section = ({ id, eyebrow, title, sub, children, testId }) => (
   <section id={id} className="px-5 sm:px-8 lg:px-16 py-16 sm:py-24 max-w-7xl mx-auto" data-testid={testId}>
@@ -25,6 +29,9 @@ const MODULES = [
 export default function Landing() {
   const { user } = useAuth();
   const ctaTo = user ? "/dashboard" : "/register";
+  useEffect(() => {
+    document.title = PAGE_TITLE;
+  }, []);
   return (
     <div className="min-h-screen bg-background" data-testid="landing-page">
       <header className="sticky top-0 z-40 border-b border-slate-800/70 bg-[#0b132b]/80 backdrop-blur-xl">
@@ -32,6 +39,7 @@ export default function Landing() {
           <Brand />
           <nav className="hidden md:flex items-center gap-8 text-sm text-slate-400">
             <a href="#modules" className="hover:text-slate-100" data-testid="nav-modules-link">Modules</a>
+            <a href="#use-cases" className="hover:text-slate-100" data-testid="nav-use-cases-link">Use cases</a>
             <a href="#trust" className="hover:text-slate-100" data-testid="nav-trust-link">Why firms trust us</a>
             <a href="#pricing" className="hover:text-slate-100" data-testid="nav-pricing-link">Pricing</a>
           </nav>
@@ -49,10 +57,10 @@ export default function Landing() {
           <div>
             <div className="reveal eyebrow mb-5">For bookkeeping & CPA firms</div>
             <h1 className="reveal text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.05] text-slate-50" style={{ animationDelay: "60ms" }}>
-              Statements in. <br /><span className="text-emerald-400">Balanced books</span> out.
+              The <span className="text-emerald-400">Financial Ingestion Hub</span> for Modern Bookkeepers.
             </h1>
-            <p className="reveal mt-6 text-base sm:text-lg text-slate-300 max-w-xl" style={{ animationDelay: "120ms" }}>
-              LedgerStream AI converts multi-page bank statement PDFs into clean ledgers and splits merchant payouts into penny-perfect QuickBooks journal entries, for every client in one workspace.
+            <p className="reveal mt-6 text-base sm:text-lg text-slate-300 max-w-xl" style={{ animationDelay: "120ms" }} data-testid="hero-subheadline">
+              Convert PDF bank statements to Excel, clean up multi-year historical accounting backlogs, and instantly split complex marketplace payouts (Toast, DoorDash, Shopify, LawPay) into balanced QuickBooks-ready journal entries.
             </p>
             <div className="reveal mt-9 flex flex-wrap gap-3" style={{ animationDelay: "180ms" }}>
               <Link to={ctaTo} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-semibold px-5 py-3 transition-colors" data-testid="hero-primary-cta">
@@ -85,6 +93,10 @@ export default function Landing() {
             </div>
           ))}
         </div>
+      </Section>
+
+      <Section id="use-cases" eyebrow="Financial utilities for bookkeepers" title="Use Cases" sub="From PDF bank statement conversion to QuickBooks Online payout splitting, one hub handles every ingestion job." testId="landing-use-cases-section">
+        <UseCases />
       </Section>
 
       <Section id="trust" eyebrow="Peer proof" title="Real firms. Real backlogs. Exact pennies." sub="Bookkeepers trust the math because every journal entry is validated to balance before export." testId="landing-trust-section">
