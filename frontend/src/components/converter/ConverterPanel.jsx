@@ -11,6 +11,7 @@ import { FileDropzone } from "@/components/common/FileDropzone";
 import { IsolationBadge } from "@/components/trust/TrustSignals";
 import { ParsingLoader } from "./ParsingLoader";
 import { StatementGrid } from "./StatementGrid";
+import { ReconciliationBanner } from "./ReconciliationBanner";
 
 const Stat = ({ label, value, testId, tone = "text-slate-50" }) => (
   <div className="surface px-4 py-3">
@@ -83,6 +84,7 @@ export const ConverterPanel = ({ clients, onConverted }) => {
           <Stat label="Total withdrawals" value={money(s.total_withdrawals)} tone="text-rose-300" testId="summary-withdrawals" />
           <Stat label="Closing balance" value={money(s.closing_balance)} testId="summary-closing-balance" />
         </div>
+        <ReconciliationBanner rec={s.reconciliation} />
         <StatementGrid key={statement.id} statement={statement} onSaved={setStatement} />
       </div>
     );

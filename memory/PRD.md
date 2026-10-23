@@ -28,6 +28,7 @@ CPA firm founders cleaning restaurant backlogs; solo virtual e-commerce bookkeep
 - Converter: real Textract pipeline (503 until AWS keys set), grid with filter/sort/edit, CSV/XLSX export, trial gate (402 -> /pricing)
 - Splitter: CSV detection for 5 platforms, balanced ledger, live recalc, QBO CSV, sample CSVs
 - Billing: Stripe sandbox checkout, status polling, Customer Portal, webhooks at /api/webhooks/stripe and /api/stripe/webhook; subscription_status trial <-> active_subscriber
+- 2026-10-23: Statement reconciliation check (opening + deposits - withdrawals vs printed running/closing balance; mismatched rows highlighted; recomputed on row edits). AWS keys requested via secure card; user skipped, so Textract is still not connected
 - Tested: iteration_1 (backend 23/23; frontend flows incl. real Stripe test checkout)
 
 ## Backlog

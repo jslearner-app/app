@@ -37,6 +37,11 @@ export const StatementGrid = ({ statement, onSaved }) => {
     return list;
   }, [rows, query, sort]);
 
+  const flagged = useMemo(
+    () => new Set((statement.summary?.reconciliation?.mismatched_rows || []).map((m) => m.id)),
+    [statement.summary]
+  );
+
   const updateCell = (id, key, value, num) =>
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, [key]: num ? (value === "" ? null : Number(value)) : value } : r)));
 
@@ -108,7 +113,12 @@ export const StatementGrid = ({ statement, onSaved }) => {
           </thead>
           <tbody>
             {visible.map((r) => (
-              <tr key={r.id} className="border-b border-slate-800/70 hover:bg-slate-800/30 transition-colors" data-testid={`grid-row-${r.id}`}>
+              <tr
+                key={r.id}
+                className={`border-b border-slate-800/70 transition-colors ${flagged.has(r.id) ? "bg-amber-500/10 hover:bg-amber-500/15 shadow-[inset_3px_0_0_#fbbf24]" : "hover:bg-slate-800/30"}`}
+                data-testid={`grid-row-${r.id}`}
+                data-mismatch={flagged.has(r.id) ? "true" : undefined}
+              >
                 {COLS.map((c) => (
                   <td key={c.key} className={`px-4 py-2.5 ${c.num ? "text-right num" : ""} ${c.key === "description" ? "text-slate-100" : "text-slate-300"}`}>
                     {editing ? (
