@@ -49,7 +49,8 @@ def textract_config() -> dict:
 
 
 def textract_enabled() -> bool:
-    return all(textract_config().values())
+    values = textract_config().values()
+    return all(values) and not any(v.startswith("AWS_PLACEHOLDER") for v in values)
 
 
 def textract_client():
