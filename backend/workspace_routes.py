@@ -293,6 +293,10 @@ async def history(client_id: Optional[str] = None, kind: Optional[str] = None, u
     if client_id:
         query["client_id"] = client_id
     items = []
+    if kind == "needs_review":
+        return await db.statements.find(
+            {**query, "summary.reconciliation.status": "mismatch"}, LIST_PROJECTION
+        ).sort("created_at", -1).to_list(1000)
     if kind in (None, "statement"):
         items += await db.statements.find(query, LIST_PROJECTION).to_list(1000)
     if kind in (None, "payout"):

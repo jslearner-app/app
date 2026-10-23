@@ -7,7 +7,7 @@ import { money, platformName, shortDate } from "@/lib/format";
 import { useClients } from "@/hooks/useClients";
 import { PageHeader } from "@/components/common/PageHeader";
 
-const KINDS = [{ id: "all", label: "All" }, { id: "statement", label: "Statements" }, { id: "payout", label: "Payouts" }];
+const KINDS = [{ id: "all", label: "All" }, { id: "statement", label: "Statements" }, { id: "payout", label: "Payouts" }, { id: "needs_review", label: "Needs review" }];
 
 const exportItem = (it) =>
   (it.kind === "statement"
