@@ -1,0 +1,102 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --background: 226 59% 11%;
+        --foreground: 210 40% 98%;
+        --card: 224 46% 14%;
+        --card-foreground: 210 40% 98%;
+        --popover: 224 46% 13%;
+        --popover-foreground: 210 40% 98%;
+        --primary: 160 84% 39%;
+        --primary-foreground: 160 80% 6%;
+        --secondary: 217 33% 17%;
+        --secondary-foreground: 210 40% 96%;
+        --muted: 217 33% 17%;
+        --muted-foreground: 215 20% 65%;
+        --accent: 217 33% 20%;
+        --accent-foreground: 210 40% 98%;
+        --destructive: 0 72% 51%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 220 30% 22%;
+        --input: 220 30% 24%;
+        --ring: 160 84% 39%;
+        --radius: 0.625rem;
+        --navy: #0b132b;
+        --navy-deep: #080e21;
+        --charcoal: #1e293b;
+        --emerald: #10b981;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    html {
+        scroll-behavior: smooth;
+    }
+    body {
+        @apply bg-background text-foreground font-sans antialiased;
+    }
+    h1, h2, h3, h4 {
+        @apply font-display;
+    }
+    ::selection {
+        background: rgba(16, 185, 129, 0.35);
+        color: #f8fafc;
+    }
+}
+
+@layer components {
+    .surface {
+        @apply bg-card/80 border border-border rounded-xl;
+    }
+    .eyebrow {
+        @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-400;
+    }
+    .num {
+        @apply font-mono tabular-nums;
+    }
+    .grid-bg {
+        background-image:
+            linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+        background-size: 44px 44px;
+    }
+    .noise::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.05;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+    .reveal {
+        opacity: 0;
+        animation: reveal 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+    }
+}
+
+@keyframes reveal {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scanline {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(400%); }
+}
+
+.scan-bar {
+    animation: scanline 1.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .reveal { animation: none; opacity: 1; }
+    .scan-bar { animation: none; }
+}

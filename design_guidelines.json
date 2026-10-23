@@ -1,0 +1,106 @@
+{
+  "project_name": "LedgerStream AI",
+  "app_type": "B2B SaaS Dashboard & Marketing Web Application",
+  "theme": "Dark Navy, Charcoal, and Emerald Green Professional Trust Palette",
+  "typography": {
+    "heading_font": "Plus Jakarta Sans, Cabinet Grotesk, sans-serif",
+    "body_font": "Inter, IBM Plex Sans, sans-serif",
+    "mono_font": "JetBrains Mono, IBM Plex Mono, monospace",
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl font-semibold tracking-tight",
+      "h3": "text-xl sm:text-2xl font-semibold tracking-tight",
+      "h4": "text-lg sm:text-xl font-medium",
+      "body": "text-base text-slate-300 leading-relaxed",
+      "small_label": "text-xs font-semibold tracking-wider uppercase text-slate-400",
+      "metric_value": "text-3xl sm:text-4xl font-extrabold tracking-tight font-mono"
+    }
+  },
+  "colors": {
+    "primary_dark_navy": "#0B132B",
+    "surface_navy_dark": "#0F172A",
+    "surface_charcoal": "#1E293B",
+    "surface_charcoal_light": "#334155",
+    "accent_emerald": "#10B981",
+    "accent_emerald_hover": "#059669",
+    "accent_emerald_glow": "rgba(16, 185, 129, 0.15)",
+    "text_primary": "#F8FAFC",
+    "text_secondary": "#94A3B8",
+    "text_muted": "#64748B",
+    "border_subtle": "#334155",
+    "border_highlight": "#475569",
+    "badge_success_bg": "#064E3B",
+    "badge_success_text": "#34D399",
+    "badge_warning_bg": "#78350F",
+    "badge_warning_text": "#FBBF24"
+  },
+  "visual_enhancers": {
+    "card_style": "bg-slate-900/90 border border-slate-800 rounded-xl p-6 shadow-xl backdrop-blur-md hover:border-slate-700 transition-all duration-200",
+    "interactive_table": "w-full text-sm text-left border-collapse border border-slate-800 font-mono",
+    "table_header": "bg-slate-800/80 text-slate-300 font-semibold uppercase text-xs tracking-wider px-4 py-3 border-b border-slate-700",
+    "table_row": "border-b border-slate-800/80 hover:bg-slate-800/40 transition-colors duration-150 text-slate-200",
+    "trust_badge": "inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-800/90 border border-slate-700/80 text-xs font-medium text-slate-300 shadow-sm",
+    "dropzone_active": "border-2 border-dashed border-emerald-500 bg-emerald-950/20 text-emerald-400 p-8 rounded-xl text-center cursor-pointer transition-all duration-200",
+    "dropzone_idle": "border-2 border-dashed border-slate-700 hover:border-emerald-500/60 bg-slate-900/50 hover:bg-slate-900 p-8 rounded-xl text-center cursor-pointer transition-all duration-200"
+  },
+  "component_structure": {
+    "sidebar": "Fixed desktop shell with Dark Navy background, company brand logo, navigation links (Dashboard, Client Accounts, History, Billing), quick client status indicator, and profile/logout trigger.",
+    "dashboard_header": "Includes active client selector dropdown, usage badge (e.g. '3/5 Free Pages Used'), and high-level metric summaries.",
+    "bank_statement_converter": {
+      "upload_area": "Drag-and-drop multi-page PDF upload with format validation (.pdf). Beneath upload hotzone, Placement A badge: '🔒 Secure 256-bit Document Isolation. Your files are automatically deleted after 1 hour.'",
+      "loading_state": "Simulated multi-step parsing progress: 'Parsing statement structure via AWS Textract...', 'Extracting tabular transaction coordinates...', 'Validating running balances...'",
+      "data_grid": "Interactive table with columns: Date, Description, Reference/Check #, Withdrawals ($), Deposits ($), Balance ($). Features search filter, row edit mode, and 'Export to Accounting Excel/CSV' action button."
+    },
+    "merchant_payout_splitter": {
+      "upload_area": "CSV file upload for Toast, DoorDash, UberEats, Shopify, Stripe payout reports.",
+      "controls": "Interactive Commission Rate % slider/input (default 30%), platform target selector, and calculate trigger.",
+      "double_entry_matrix": "Visual ledger showing Debit Bank Clearing (Net Cash), Debit Delivery Commissions Expense, and Credit Gross Sales Revenue.",
+      "balancing_badge": "Visual ledger footer displaying Total Debits == Total Credits with prominent green badge 'Balanced: Ready to Export' and 'Download QuickBooks Journal Entry CSV' button."
+    },
+    "client_accounts_crud": "Grid/list view of client accounts ('The Burger Shack', 'Downtown Boutique') with add client modal, edit details, and page conversion stats.",
+    "history": "Detailed history log of parsed statements and split merchant payouts with download re-trigger, status, and client tagging.",
+    "billing": "Usage meter card displaying free trial usage (X / 5 pages), pricing tier comparison grid ($99/mo Starter, $199/mo Agency), and Placement B trust badges (QuickBooks Certified, Xero Approved, Stripe Secure Checkout) adjacent to checkout trigger."
+  },
+  "trust_signals_section": {
+    "platform_badges": [
+      {"name": "Shopify Compatible", "tagline": "Direct CSV Ingestion Pipeline"},
+      {"name": "DoorDash Data Partner", "tagline": "Automated Fee & Commission Parsing"},
+      {"name": "UberEats Ready", "tagline": "Instant Settlement Breakdown"},
+      {"name": "Toast Ecosystem", "tagline": "POS Daily Clearing Reconciliation"}
+    ],
+    "case_study_reviews": [
+      {
+        "author": "Sarah M.",
+        "role": "CPA & Founder of Apex Bookkeeping Firm",
+        "quote": "LedgerStream AI cut our monthly merchant reconciliation time down by 85%. Turning multi-page PDF bank statements into structured QBO journal entries takes seconds."
+      },
+      {
+        "author": "David K.",
+        "role": "Freelance E-commerce Bookkeeper",
+        "quote": "The Merchant Payout Splitter handles complex DoorDash and Toast commission math automatically. Perfectly balanced double-entry output every single time."
+      }
+    ],
+    "security_certifications": ["AWS Isolated Parsing", "256-Bit SSL Encryption", "Stripe Verified Checkout", "Zero Permanent Data Retention"]
+  },
+  "image_urls": {
+    "hero_financial_dashboard": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwzfHxhY2NvdW50aW5nJTIwZmluYW5jaWFsJTIwc29mdHdhcmUlMjBkYXNoYm9hcmQlMjBib29ra2VlcGluZ3xlbnwwfHx8fDE3OTI2Njg5MjN8MA&ixlib=rb-4.1.0&q=85",
+    "trust_security_badge": "https://images.unsplash.com/photo-1638947604157-d259d219eeee?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1NzZ8MHwxfHNlYXJjaHw0fHxmaW5hbmNpYWwlMjBzb2Z0d2FyZSUyMHRydXN0JTIwYmFkZ2UlMjBsb2dvJTIwc2VjdXJpdHl8ZW58MHx8fHwxNzkyNjY4OTIzfDA&ixlib=rb-4.1.0&q=85",
+    "certified_badge_photo": "https://images.pexels.com/photos/11035385/pexels-photo-11035385.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+  },
+  "instructions_to_main_agent": [
+    "Ensure all interactive components (buttons, tabs, inputs, table rows, file upload dropzones, modals) include explicit data-testid attributes formatted in kebab-case (e.g. data-testid='pdf-upload-dropzone', data-testid='export-csv-button', data-testid='commission-rate-input').",
+    "Implement JS components (not TSX files) matching existing React setup in /app/frontend/src.",
+    "Utilize dark navy (#0B132B / #0F172A), charcoal (#1E293B), and emerald green (#10B981) for primary states, badges, and accents across the application.",
+    "Ensure Placement A (Secure 256-bit isolation badge) is rendered under the Bank Statement PDF dropzone.",
+    "Ensure Placement B (QuickBooks Certified, Xero Approved, Stripe Secure Checkout logos/badges) is rendered adjacent to the $99 Starter tier card.",
+    "Implement realistic simulated parsing delay with AWS Textract step indicators when a bank statement PDF is dropped.",
+    "Ensure double-entry ledger calculation dynamically updates when the platform commission rate % slider/input is changed, showing balanced total debits and credits."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "Never use dark colors as gradients; keep backgrounds solid or subtle glassmorphic dark navy/charcoal.",
+    "Maintain high contrast text compliance (APCA / WCAG AA) with white and light slate text on dark navy backgrounds.",
+    "Never center-align whole page app containers; preserve natural left-aligned reading hierarchy.",
+    "Provide crisp borders (1px border-slate-800) and optical padding for all metric cards and data grids.",
+    "Use Lucide React icons for functional UI elements; avoid generic AI emoji characters."
+  ]
+}
