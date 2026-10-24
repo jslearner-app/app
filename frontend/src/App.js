@@ -13,6 +13,8 @@ import History from "@/pages/History";
 import Billing from "@/pages/Billing";
 import Pricing from "@/pages/Pricing";
 import Contact from "@/pages/Contact";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import { PaymentSuccess, PaymentCancel } from "@/pages/PaymentResult";
 
 function AppRouter() {
@@ -24,6 +26,8 @@ function AppRouter() {
       <Route path="/login" element={<AuthPage mode="login" />} />
       <Route path="/register" element={<AuthPage mode="register" />} />
       <Route path="/contact" element={<Contact />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/clients" element={<Clients />} />

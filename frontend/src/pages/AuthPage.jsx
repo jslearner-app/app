@@ -59,6 +59,9 @@ export default function AuthPage({ mode }) {
             {!isLogin && <Field id="firm" label="Firm name (optional)" value={form.firm_name} onChange={set("firm_name")} />}
             <Field id="email" label="Work email" type="email" value={form.email} onChange={set("email")} required autoComplete="email" />
             <Field id="password" label="Password" type="password" value={form.password} onChange={set("password")} required minLength={isLogin ? 1 : 8} autoComplete={isLogin ? "current-password" : "new-password"} />
+            {isLogin && (
+              <Link to="/forgot-password" className="block -mt-2 text-xs text-slate-400 hover:text-emerald-300" data-testid="login-forgot-password-link">Forgot password?</Link>
+            )}
             {error && <p className="text-sm text-rose-400" data-testid="auth-error-message">{error}</p>}
             <Button type="submit" disabled={busy} className="w-full h-11 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-semibold" data-testid="auth-submit-button">
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}{isLogin ? "Sign in" : "Create account"}

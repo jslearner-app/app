@@ -26,6 +26,7 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
 from mangum import Mangum
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -69,6 +70,11 @@ EMAIL_BASE_URL = "https://integrations.emergentagent.com"
 EMAIL_KEY = os.environ["EMERGENT_EMAIL_KEY"]
 EMAIL_FROM_NAME = os.environ["EMAIL_FROM_NAME"]
 EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")
+
+_RAW_ORIGINS = [o.strip().rstrip("/") for o in os.environ["CORS_ORIGINS"].split(",") if o.strip()]
+if "*" in _RAW_ORIGINS:
+    logger.warning("CORS_ORIGINS='*' is ignored: list the exact frontend origins instead")
+ALLOWED_ORIGINS = [o for o in _RAW_ORIGINS if o != "*"]
 
 
 def now():
@@ -115,9 +121,54 @@ def decode_token(token: str, expected_type: str) -> dict:
     return payload
 
 
-def set_auth_cookies(response, user_id: str, email: str):
+def set_auth_cookies(response, user_id: str, email: str) -> str:
+    refresh_token = create_refresh_token(user_id)
     response.set_cookie("access_token", create_access_token(user_id, email), max_age=900, **COOKIE_OPTS)
-    response.set_cookie("refresh_token", create_refresh_token(user_id), max_age=604800, **COOKIE_OPTS)
+    response.set_cookie("refresh_token", refresh_token, max_age=604800, **COOKIE_OPTS)
+    return refresh_token
+
+
+# ---------- CSRF: token = HMAC of the long-lived session cookie, sent back in X-CSRF-Token ----------
+CSRF_COOKIES = ("refresh_token", "session_token")
+CSRF_EXEMPT = ("/api/auth/login", "/api/auth/register", "/api/auth/google/session", "/api/auth/forgot-password",
+               "/api/auth/reset-password", "/api/auth/refresh", "/api/auth/logout", "/api/webhooks/", "/api/stripe/webhook")
+
+
+def csrf_token_for(base: str) -> str:
+    return hmac.new(_jwt_secret().encode(), f"csrf:{base}".encode(), hashlib.sha256).hexdigest()
+
+
+def request_csrf_token(request: Request):
+    bases = [request.cookies[n] for n in CSRF_COOKIES if request.cookies.get(n)]
+    return csrf_token_for(bases[0]) if bases else None
+
+
+def csrf_valid(request: Request) -> bool:
+    sent = request.headers.get("X-CSRF-Token", "")
+    return any(hmac.compare_digest(sent, csrf_token_for(request.cookies[n])) for n in CSRF_COOKIES if request.cookies.get(n))
+
+
+def client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    return forwarded or (request.client.host if request.client else "unknown")
+
+
+async def throttle(request: Request, scope: str, limit: int, window_minutes: int = 60):
+    key = f"{scope}:{client_ip(request)}"
+    if await db.rate_limits.count_documents({"key": key, "created_at": {"$gte": now() - timedelta(minutes=window_minutes)}}) >= limit:
+        raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
+    await db.rate_limits.insert_one({"key": key, "created_at": now()})
+
+
+def trusted_origin(url: str, request: Request) -> str:
+    """Only our own frontends may be used as Stripe/email return addresses."""
+    origin = (url or "").rstrip("/")
+    parsed = urlparse(origin)
+    same_host = parsed.scheme == "https" and parsed.netloc in (
+        request.headers.get("x-forwarded-host"), request.headers.get("host"))
+    if origin in ALLOWED_ORIGINS or same_host:
+        return origin
+    raise HTTPException(status_code=400, detail="Unrecognised app address")
 
 
 def _as_utc(dt):
@@ -479,8 +530,18 @@ def run_textract_diagnostic() -> dict:
     return {"status": "ready" if ok else "parse_mismatch", "steps": steps}
 
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def safe_cell(value):
+    """Neutralises spreadsheet formula injection in exported text cells."""
+    return f"'{value}" if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES) else value
+
+
 def rows_to_export(rows: list, fmt: str) -> bytes:
     df = pd.DataFrame(rows, columns=STATEMENT_COLUMNS)
+    for col in ("date", "description", "reference"):
+        df[col] = df[col].map(safe_cell)
     df.columns = EXPORT_HEADERS
     if fmt == "xlsx":
         buf = io.BytesIO()
@@ -689,12 +750,12 @@ def net_variance(file_net_total, ledger: dict):
 def ledger_to_qbo_csv(payout: dict) -> bytes:
     journal_no = f"LS-{payout['id'][-6:].upper()}"
     journal_date = date.today().strftime("%m/%d/%Y")
-    desc = f"{PLATFORM_NAMES.get(payout['platform'], payout['platform'])} payout split - {payout['filename']}"
+    desc = safe_cell(f"{PLATFORM_NAMES.get(payout['platform'], payout['platform'])} payout split - {payout['filename']}")
     rows = [
         [journal_no, journal_date, line["account"],
          f"{line['debit']:.2f}" if line["debit"] else "",
          f"{line['credit']:.2f}" if line["credit"] else "",
-         desc, payout.get("client_name", ""), line["memo"]]
+         desc, safe_cell(payout.get("client_name", "")), safe_cell(line["memo"])]
         for line in payout["ledger"]["lines"]
     ]
     return pd.DataFrame(rows, columns=QBO_HEADERS).to_csv(index=False).encode("utf-8")
@@ -908,22 +969,22 @@ def new_user_doc(email: str, name: str, provider: str, **extra) -> dict:
 
 
 @app.post("/api/auth/register")
-async def register(body: RegisterIn, response: Response):
+async def register(body: RegisterIn, request: Request, response: Response):
+    await throttle(request, "register", 20)
     email = body.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="An account with this email already exists")
     doc = new_user_doc(email, body.name.strip(), "password",
                        firm_name=body.firm_name.strip(), password_hash=hash_password(body.password))
     await db.users.insert_one(doc)
-    set_auth_cookies(response, doc["user_id"], email)
-    return public_user(doc)
+    refresh_token = set_auth_cookies(response, doc["user_id"], email)
+    return {**public_user(doc), "csrf_token": csrf_token_for(refresh_token)}
 
 
 @app.post("/api/auth/login")
 async def login(body: LoginIn, request: Request, response: Response):
     email = body.email.lower()
-    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    identifier = f"{forwarded or (request.client.host if request.client else 'unknown')}:{email}"
+    identifier = f"{client_ip(request)}:{email}"
     attempt = await db.login_attempts.find_one({"identifier": identifier}, {"_id": 0})
     if attempt and attempt.get("locked_until") and _as_utc(attempt["locked_until"]) > now():
         raise HTTPException(status_code=429, detail="Too many failed attempts. Try again in 15 minutes.")
@@ -936,8 +997,8 @@ async def login(body: LoginIn, request: Request, response: Response):
         await db.login_attempts.update_one({"identifier": identifier}, {"$set": update}, upsert=True)
         raise HTTPException(status_code=401, detail="Invalid email or password")
     await db.login_attempts.delete_one({"identifier": identifier})
-    set_auth_cookies(response, user["user_id"], email)
-    return public_user(user)
+    refresh_token = set_auth_cookies(response, user["user_id"], email)
+    return {**public_user(user), "csrf_token": csrf_token_for(refresh_token)}
 
 
 @app.post("/api/auth/google/session")
@@ -961,12 +1022,12 @@ async def google_session(body: GoogleSessionIn, response: Response):
         "expires_at": now() + timedelta(days=7), "created_at": now(),
     })
     response.set_cookie("session_token", data["session_token"], max_age=604800, **COOKIE_OPTS)
-    return public_user(user)
+    return {**public_user(user), "csrf_token": csrf_token_for(data["session_token"])}
 
 
 @app.get("/api/auth/me")
-async def me(user: dict = Depends(get_current_user)):
-    return public_user(user)
+async def me(request: Request, user: dict = Depends(get_current_user)):
+    return {**public_user(user), "csrf_token": request_csrf_token(request)}
 
 
 @app.post("/api/auth/refresh")
@@ -997,6 +1058,7 @@ async def logout(request: Request, response: Response):
 
 @app.post("/api/auth/forgot-password")
 async def forgot_password(body: ForgotIn, request: Request):
+    await throttle(request, "forgot", 5)
     user = await db.users.find_one({"email": body.email.lower()}, {"_id": 0})
     if user:
         token = secrets.token_urlsafe(32)
@@ -1004,8 +1066,33 @@ async def forgot_password(body: ForgotIn, request: Request):
             "token": token, "user_id": user["user_id"], "used": False,
             "expires_at": now() + timedelta(hours=1),
         })
-        logger.info("Password reset link: %s/reset-password?token=%s", request.headers.get("origin", ""), token)
+        try:
+            base = trusted_origin(request.headers.get("origin", ""), request)
+        except HTTPException:
+            base = ALLOWED_ORIGINS[0]
+        try:
+            await send_email(to=user["email"], subject=f"Reset your {EMAIL_FROM_NAME} password",
+                             html=_render_reset_email(user.get("name", ""), f"{base}/reset-password?token={token}"))
+        except HTTPException as e:
+            logger.warning("Password reset email failed for %s: %s", user["user_id"], e.detail)
     return {"ok": True}
+
+
+def _render_reset_email(name: str, link: str) -> str:
+    return (
+        '<table role="presentation" width="100%" style="font-family:Arial,sans-serif;background:#f8fafc">'
+        '<tr><td style="padding:24px">'
+        '<h2 style="margin:0 0 12px;font-size:18px;color:#0b132b">Reset your password</h2>'
+        f'<p style="margin:0 0 12px;font-size:14px;line-height:1.5;color:#0f172a">Hi {escape(name or "there")}, we received a '
+        f'request to reset the password for your {escape(EMAIL_FROM_NAME)} account. The link below expires in 1 hour.</p>'
+        f'<p style="margin:20px 0"><a href="{escape(link)}" style="background:#10b981;color:#052e1f;padding:10px 18px;'
+        'border-radius:6px;text-decoration:none;font-weight:bold">Choose a new password</a></p>'
+        '<p style="margin:0 0 12px;font-size:13px;color:#64748b">If you did not ask for this, you can ignore this email and '
+        'your password stays the same.</p>'
+        f'<p style="margin-top:16px;font-size:12px;color:#94a3b8">Sent by {escape(EMAIL_FROM_NAME)}. '
+        'We never ask for your password or card details by email.</p>'
+        '</td></tr></table>'
+    )
 
 
 @app.post("/api/auth/reset-password")
@@ -1314,7 +1401,8 @@ VARIANCE_HEADERS = ["Date", "Client", "Platform", "File", "Gross Sales", "Commis
 
 def variance_to_csv(payouts: list) -> bytes:
     rows = [[
-        p["created_at"][:10], p.get("client_name", ""), PLATFORM_NAMES.get(p["platform"], p["platform"]), p["filename"],
+        p["created_at"][:10], safe_cell(p.get("client_name", "")), PLATFORM_NAMES.get(p["platform"], p["platform"]),
+        safe_cell(p["filename"]),
         f"{p['gross_total']:.2f}",
         f"{p['fee_total']:.2f} fees from file" if p["platform"] in FILE_FEE_PLATFORMS else f"{p['commission_rate']:g}% commission",
         f"{p['net_variance']['file_net']:.2f}", f"{p['net_variance']['calculated_net']:.2f}",
@@ -1401,7 +1489,7 @@ async def billing_summary(user: dict = Depends(get_current_user)):
 
 
 @app.post("/api/payments/checkout")
-async def create_checkout(body: CheckoutIn, user: dict = Depends(get_current_user)):
+async def create_checkout(body: CheckoutIn, request: Request, user: dict = Depends(get_current_user)):
     lookup_key = PLAN_LOOKUP.get(body.plan)
     if not lookup_key:
         raise HTTPException(status_code=400, detail="Unknown plan")
@@ -1409,7 +1497,7 @@ async def create_checkout(body: CheckoutIn, user: dict = Depends(get_current_use
     if not prices:
         raise HTTPException(status_code=500, detail=f"Price not found: {lookup_key}")
     price = prices[0]
-    origin = body.origin_url.rstrip("/")
+    origin = trusted_origin(body.origin_url, request)
     kwargs = dict(
         line_items=[{"price": price.id, "quantity": 1}],
         mode="subscription",
@@ -1432,8 +1520,8 @@ async def create_checkout(body: CheckoutIn, user: dict = Depends(get_current_use
 
 
 @app.get("/api/payments/status/{session_id}")
-async def payment_status(session_id: str):
-    record = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
+async def payment_status(session_id: str, user: dict = Depends(get_current_user)):
+    record = await db.payment_transactions.find_one({"session_id": session_id, "user_id": user["user_id"]}, {"_id": 0})
     if not record:
         raise HTTPException(status_code=404, detail="Transaction not found")
     if record.get("payment_status") != "paid":
@@ -1471,14 +1559,14 @@ def _portal_configuration_id() -> str:
 
 
 @app.post("/api/billing/portal")
-async def billing_portal(body: PortalIn, user: dict = Depends(get_current_user)):
+async def billing_portal(body: PortalIn, request: Request, user: dict = Depends(get_current_user)):
     customer = user.get("stripe_customer_id")
     if not customer or user.get("plan") not in PAID_PLANS:
         raise HTTPException(status_code=400, detail="No active subscription to manage yet")
     try:
         session = stripe.billing_portal.Session.create(
             customer=customer, configuration=_portal_configuration_id(),
-            return_url=f"{body.origin_url.rstrip('/')}/billing",
+            return_url=f"{trusted_origin(body.origin_url, request)}/billing",
         )
     except stripe.error.StripeError as e:
         logger.exception("Stripe portal failed")
@@ -1661,6 +1749,7 @@ async def ensure_initialized():
     await db.payment_transactions.create_index("session_id", unique=True)
     await db.contact_messages.create_index([("user_id", 1), ("created_at", -1)])
     await db.textract_checks.create_index([("user_id", 1), ("checked_at", -1)])
+    await db.rate_limits.create_index("created_at", expireAfterSeconds=3600)
     async for p in db.payouts.find({"net_variance": {"$exists": False}, "ledger.lines.0": {"$exists": True}},
                                    {"_id": 0, "id": 1, "file_net_total": 1, "ledger": 1}):
         await db.payouts.update_one({"id": p["id"]}, {"$set": {"net_variance": net_variance(p.get("file_net_total"), p["ledger"])}})
@@ -1675,12 +1764,22 @@ async def init_once(request: Request, call_next):
     return await call_next(request)
 
 
+@app.middleware("http")
+async def csrf_protect(request: Request, call_next):
+    unsafe = request.method in ("POST", "PUT", "PATCH", "DELETE")
+    has_session = any(request.cookies.get(n) for n in (*CSRF_COOKIES, "access_token"))
+    if unsafe and has_session and not request.url.path.startswith(CSRF_EXEMPT) and not csrf_valid(request):
+        return JSONResponse({"detail": "Security check failed. Refresh the page and try again."}, status_code=403)
+    return await call_next(request)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=[o.strip() for o in os.environ["CORS_ORIGINS"].split(",") if o.strip()],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Stripe-Signature", "X-LedgerStream-Signature"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Stripe-Signature", "X-LedgerStream-Signature",
+                   "X-CSRF-Token"],
     expose_headers=["Content-Disposition"],
     max_age=600,
 )

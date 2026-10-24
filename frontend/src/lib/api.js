@@ -5,9 +5,18 @@ export const api = axios.create({ baseURL: API, withCredentials: true });
 
 const NO_RETRY = ["/auth/refresh", "/auth/login", "/auth/register", "/auth/google/session"];
 let refreshing = null;
+let csrfToken = null;
+
+api.interceptors.request.use((config) => {
+  if (csrfToken) config.headers["X-CSRF-Token"] = csrfToken;
+  return config;
+});
 
 api.interceptors.response.use(
-  (r) => r,
+  (r) => {
+    if (r.data?.csrf_token) csrfToken = r.data.csrf_token;
+    return r;
+  },
   async (error) => {
     const original = error.config || {};
     const skip = NO_RETRY.some((p) => (original.url || "").includes(p));
