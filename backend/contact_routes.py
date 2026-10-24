@@ -4,7 +4,7 @@ from html import escape
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from core import db, now, new_id, get_current_user
 from emailer import EMAIL_FROM_NAME, send_email
@@ -30,6 +30,11 @@ class ContactIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     role: Literal["firm_owner", "staff_bookkeeper", "freelance_bookkeeper", "controller", "other"]
     message: str = Field(min_length=10, max_length=4000)
+
+    @field_validator("name", "message", mode="before")
+    @classmethod
+    def _strip(cls, v):
+        return v.strip() if isinstance(v, str) else v
 
 
 def _render(desk_label: str, name: str, email: str, role: str, firm: str, plan: str, message: str) -> str:
@@ -57,7 +62,8 @@ def _render(desk_label: str, name: str, email: str, role: str, firm: str, plan: 
 @router.post("/contact")
 async def submit_contact(body: ContactIn, user: dict = Depends(get_current_user)):
     since = (now() - timedelta(hours=1)).isoformat()
-    recent = await db.contact_messages.count_documents({"user_id": user["user_id"], "created_at": {"$gte": since}})
+    recent = await db.contact_messages.count_documents(
+        {"user_id": user["user_id"], "created_at": {"$gte": since}, "status": {"$ne": "failed"}})
     if recent >= HOURLY_LIMIT:
         raise HTTPException(status_code=429, detail="You've sent several messages recently. Please try again in an hour.")
     desk_label, env_key = DESKS[body.desk]

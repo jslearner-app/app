@@ -17,8 +17,8 @@ const ROLES = [
   { id: "other", label: "Other" },
 ];
 const DESKS = [
-  { id: "support", label: "Support & Engineering" },
-  { id: "sales", label: "Enterprise & Sales" },
+  { id: "support", label: "Support", full: "Support & Engineering" },
+  { id: "sales", label: "Sales", full: "Enterprise & Sales" },
 ];
 const field = "bg-slate-950/50 border-slate-700";
 
@@ -49,7 +49,7 @@ export const ContactForm = ({ compact = false }) => {
       <div className="surface p-6 flex items-start gap-3" data-testid="contact-form-success">
         <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
         <div>
-          <div className="font-semibold text-slate-100">Message sent to {DESKS.find((d) => d.id === sent).label}</div>
+          <div className="font-semibold text-slate-100">Message sent to {DESKS.find((d) => d.id === sent).full}</div>
           <p className="mt-1 text-sm text-slate-400">We'll reply to {user.email}. {sent === "sales" ? "Expect a quote within 1 business day." : "Expect an engineer follow-up within 12 business hours."}</p>
           <button onClick={() => setSent(null)} className="mt-3 text-sm font-medium text-emerald-400 hover:text-emerald-300" data-testid="contact-form-send-another">Send another message</button>
         </div>
@@ -73,8 +73,8 @@ export const ContactForm = ({ compact = false }) => {
           <Input id="contact-name" value={form.name} onChange={set("name")} required maxLength={120} className={field} data-testid="contact-name-input" />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="contact-email">Email</Label>
-          <Input id="contact-email" value={user.email} readOnly className={`${field} text-slate-400`} data-testid="contact-email-input" />
+          <Label htmlFor="contact-email">Email <span className="text-xs font-normal text-slate-500">(from your account)</span></Label>
+          <Input id="contact-email" value={user.email} readOnly className={`${field} text-slate-200 cursor-default`} data-testid="contact-email-input" />
         </div>
       </div>
       <div className="space-y-1.5">

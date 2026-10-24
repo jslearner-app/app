@@ -1,0 +1,30 @@
+{
+  "summary": "Tested the contact form feature without sending any real emails. Backend: 10/10 pytest passed. POST /api/contact returns 401 without a session; invalid desk, empty name, name over 120 chars, invalid role, message under 10 or over 4000 chars, and missing fields all return 422. With 5 seeded contact_messages docs in the last hour it returns 429 with the 'try again in an hour' detail, adds no new record, and ignores the injected to/subject/html fields. Frontend (Playwright, every /api/contact call stubbed): the dashboard contact section works. Name is prefilled ('Demo Bookkeeper'), email is read-only, the role select has 5 options, and the sales desk changes the placeholder. A message under 10 chars shows a toast and makes no API call. A stubbed 200 shows contact-form-success with the desk-specific text (sales: quote within 1 business day). Send-another resets the message. Stubbed 429/503 show the error toast, the button is disabled while the request is in flight and re-enabled afterwards, and the message is kept. /contact shows the sign-in prompt when logged out and the form when logged in. No horizontal overflow at 390px on /contact or /dashboard.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/contact", "issue": "Validation runs before strip(): a name of only spaces passes min_length=1 and is saved/emailed as an empty name; a message padded with whitespace (e.g. 'hi' + 8 spaces) passes min_length=10 on the server. Found by code review only (not POSTed, because a valid request would send a real email). Suggested fix: add a pydantic field_validator that strips the value and then checks the length, or use constr(strip_whitespace=True)."},
+      {"endpoint": "POST /api/contact", "issue": "The rate limit counts failed/pending records too, so 5 sends that fail with 502/503 also lock the user out for an hour. Probably fine, but noting it."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "ContactForm", "issues": ["The read-only email input uses text-slate-400, so its value looks like placeholder text. Consider a 'from your account' hint or a lock icon.", "On /contact at 390px the desk toggle labels wrap to 2 lines ('Support & Engineering' / 'Enterprise & Sales'). Consider shorter labels or full-width equal toggles on mobile."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter6_contact.py", "/app/test_reports/pytest/pytest_iter6.xml"],
+  "action_items": ["(Minor) Strip name/message before the length validation in ContactIn"],
+  "critical_code_review_comments": [
+    "The recipient comes only from the server env by desk, the subject is built on the server, and the email comes from the session user. Pydantic ignores extra fields, so the caller cannot inject a recipient. Good.",
+    "The HTML is escaped (escape()) before rendering. Good.",
+    "The frontend client check uses trim() but the backend does not, so the two can disagree on edge cases (see minor backend issue)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter6_contact.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Inserted 5 temporary contact_messages docs (marker TEST_iter6_ratelimit) for the 429 test and deleted them afterwards. contact_messages is now empty. Demo user is still plan free / pages_used 0 / trial.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Never make a valid unstubbed POST /api/contact: it emails the real support@/sales@ledgerstreamai.com. Use page.route stubs (handler signature route, request; use page.wait_for_timeout, not asyncio). Log in through page.request.post('/api/auth/login') to set cookies."
+}
