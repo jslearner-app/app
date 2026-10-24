@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import timedelta
 from html import escape
@@ -23,6 +24,26 @@ ROLES = {
     "other": "Other",
 }
 HOURLY_LIMIT = 5
+RESPONSE_TIMES = {
+    "support": "an engineer will review and follow up within 12 business hours",
+    "sales": "our partnership team will send pricing or a processing quote within 1 business day",
+}
+logger = logging.getLogger(__name__)
+
+
+def _render_confirmation(name: str, desk_label: str, desk: str, ref: str) -> str:
+    return (
+        '<table role="presentation" width="100%" style="font-family:Arial,sans-serif;background:#f8fafc">'
+        '<tr><td style="padding:24px">'
+        f'<h2 style="margin:0 0 12px;font-size:18px;color:#0b132b">We got your message</h2>'
+        f'<p style="margin:0 0 12px;font-size:14px;line-height:1.5;color:#0f172a">Hi {escape(name)}, thanks for contacting '
+        f'the {escape(EMAIL_FROM_NAME)} {escape(desk_label)} desk. Your message has been received and '
+        f'{escape(RESPONSE_TIMES[desk])}.</p>'
+        f'<p style="margin:0 0 12px;font-size:13px;color:#64748b">Reference: {escape(ref)}</p>'
+        f'<p style="margin-top:16px;font-size:12px;color:#94a3b8">Sent by {escape(EMAIL_FROM_NAME)}. '
+        'We never ask for your password or card details by email.</p>'
+        '</td></tr></table>'
+    )
 
 
 class ContactIn(BaseModel):
@@ -83,4 +104,14 @@ async def submit_contact(body: ContactIn, user: dict = Depends(get_current_user)
         await db.contact_messages.update_one({"id": record["id"]}, {"$set": {"status": "failed"}})
         raise
     await db.contact_messages.update_one({"id": record["id"]}, {"$set": {"status": "sent", "email_id": email_id}})
-    return {"ok": True, "id": record["id"], "desk": body.desk}
+    confirmation = "sent"
+    try:
+        await send_email(
+            to=user["email"], subject=f"We got your message - {EMAIL_FROM_NAME}",
+            html=_render_confirmation(record["name"], desk_label, body.desk, record["id"]),
+        )
+    except HTTPException as e:
+        confirmation = "failed"
+        logger.warning("Confirmation email failed for %s: %s", record["id"], e.detail)
+    await db.contact_messages.update_one({"id": record["id"]}, {"$set": {"confirmation_status": confirmation}})
+    return {"ok": True, "id": record["id"], "desk": body.desk, "confirmation_sent": confirmation == "sent"}

@@ -36,6 +36,7 @@ CPA firm founders cleaning restaurant backlogs; solo virtual e-commerce bookkeep
 - 2026-10-24: Monthly page caps enforced (free 5 lifetime; Starter 200 / Agency 1,000 per UTC calendar month; atomic reserve + refund on failure). LawPay fees read line-by-line from the CSV fee column (no rate). Paid users switch plans via Stripe portal (subscription_update enabled; customer.subscription.updated webhook syncs plan)
 - 2026-10-24: Low Page Alert banner (>=80% usage, charcoal/yellow, free->pricing, Starter->Stripe portal, Agency->sales mailto, session dismiss). App footer + commented third-party header/footer widget blocks (index.html, AppShell) with .support-widget-root safe area. Public /contact page (support@ / sales@ledgerstreamai.com)
 - 2026-10-24: Contact form (dashboard bottom + /contact when signed in): name, account email (read-only), role, desk, message -> POST /api/contact (auth, server-side recipient, 5/hour rate limit, stored in contact_messages) -> Emergent managed Resend to support@/sales@ledgerstreamai.com
+- 2026-10-24: Contact confirmation email to the sender's account email ("We got your message", desk-specific response time, reference id); failure is logged and doesn't block the desk email
 - Tested: iteration_1..6 (backend 23/23; frontend flows incl. real Stripe test checkout)
 
 ## Backlog

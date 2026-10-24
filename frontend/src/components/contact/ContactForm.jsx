@@ -34,8 +34,8 @@ export const ContactForm = ({ compact = false }) => {
     if (form.message.trim().length < 10) return toast.error("Please write at least 10 characters");
     setBusy(true);
     try {
-      await api.post("/contact", form);
-      setSent(form.desk);
+      const { data } = await api.post("/contact", form);
+      setSent({ desk: form.desk, confirmed: !!data.confirmation_sent });
       setForm((f) => ({ ...f, message: "" }));
     } catch (err) {
       toast.error(errMsg(err));
@@ -49,8 +49,8 @@ export const ContactForm = ({ compact = false }) => {
       <div className="surface p-6 flex items-start gap-3" data-testid="contact-form-success">
         <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
         <div>
-          <div className="font-semibold text-slate-100">Message sent to {DESKS.find((d) => d.id === sent).full}</div>
-          <p className="mt-1 text-sm text-slate-400">We'll reply to {user.email}. {sent === "sales" ? "Expect a quote within 1 business day." : "Expect an engineer follow-up within 12 business hours."}</p>
+          <div className="font-semibold text-slate-100">Message sent to {DESKS.find((d) => d.id === sent.desk).full}</div>
+          <p className="mt-1 text-sm text-slate-400">We'll reply to {user.email}. {sent.desk === "sales" ? "Expect a quote within 1 business day." : "Expect an engineer follow-up within 12 business hours."}{sent.confirmed && " A confirmation email is on its way to your inbox."}</p>
           <button onClick={() => setSent(null)} className="mt-3 text-sm font-medium text-emerald-400 hover:text-emerald-300" data-testid="contact-form-send-another">Send another message</button>
         </div>
       </div>
