@@ -57,7 +57,7 @@ export const LedgerMatrix = ({ ledger }) => {
         <div className="h-2 rounded-full bg-sky-400/70" />
         <span className="text-slate-400 w-14">Credits</span>
         <div className="h-2 rounded-full bg-emerald-400/80" style={{ width: balanced ? "100%" : "92%" }} />
-        <span className="text-slate-400">Variance</span>
+        <span className="text-slate-400">Debit/credit difference</span>
         <span className="num text-slate-200" data-testid="ledger-difference">{money(ledger.difference)}</span>
       </div>
     </div>

@@ -28,6 +28,7 @@ export const ConverterPanel = ({ clients, onConverted }) => {
   const [parsing, setParsing] = useState(null);
   const [statement, setStatement] = useState(null);
   const [engine, setEngine] = useState(null);
+  const [parseError, setParseError] = useState("");
 
   useEffect(() => {
     api.get("/statements/engine").then(({ data }) => setEngine(data)).catch(() => {});
@@ -43,6 +44,7 @@ export const ConverterPanel = ({ clients, onConverted }) => {
     if (user.usage_pages >= user.page_limit) return navigate(`/pricing?reason=${limitReason}`);
     if (engine && !engine.configured) return toast.error("Amazon Textract is not connected yet. Add your AWS keys to enable PDF parsing.");
     setParsing(file.name);
+    setParseError("");
     const form = new FormData();
     form.append("file", file);
     form.append("client_id", clientId);
@@ -57,7 +59,8 @@ export const ConverterPanel = ({ clients, onConverted }) => {
       if (e.response?.status === 402) {
         toast.error(errMsg(e));
         navigate(`/pricing?reason=${limitReason}`);
-      } else toast.error(errMsg(e));
+      } else if (e.response?.status === 424) setParseError(errMsg(e));
+      else toast.error(errMsg(e));
     } finally {
       setParsing(null);
       refreshUser();
@@ -100,6 +103,12 @@ export const ConverterPanel = ({ clients, onConverted }) => {
         {engine && !engine.configured && (
           <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-200" data-testid="textract-not-configured-banner">
             Amazon Textract is not connected yet. Add <span className="num">AWS_ACCESS_KEY_ID</span>, <span className="num">AWS_SECRET_ACCESS_KEY</span> and <span className="num">AWS_REGION</span> to start parsing statements.
+          </div>
+        )}
+        {parseError && (
+          <div className="mb-4 rounded-lg border border-rose-500/40 bg-rose-950/40 px-4 py-3 text-sm text-rose-200 break-words" data-testid="statement-parse-error-banner">
+            <div className="font-semibold text-rose-100">Statement could not be converted</div>
+            <p className="mt-1 text-xs leading-relaxed">{parseError}</p>
           </div>
         )}
         <FileDropzone

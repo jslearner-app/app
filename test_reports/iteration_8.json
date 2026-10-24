@@ -1,0 +1,37 @@
+{
+  "summary": "Tested the Payout Variance Note and the Textract SCP 424 message on both backend and frontend. Backend: the 21 regression tests pass, and the new /app/backend_tests/test_payout_variance.py passes 9/9. The Toast sample at 30% gives exactly {file_net 5919.87, calculated_net 5965.71, difference -45.84, flagged true}, and calculated_net equals the Bank Clearing debit. Recalculating at 20% updates the variance. At 30.5379% the calculated net equals the file net (5919.87), the payout is not flagged, and that state persists on GET. The LawPay sample matches (9250 = 9250, not flagged). A CSV without a net column returns net_variance null, and null stays after recalculate. DoorDash/UberEats/Shopify/Stripe samples are consistent. POST /api/statements with a 1-page PDF returns 424 mentioning 'service control policy' and 'not charged', and pages_used is unchanged. Frontend: the amber payout-variance-note shows $5,919.87 / $5,965.71 / -$45.84. Changing the rate updates it live: at 20% it shows $6,817.96 / -$898.09; at 30.5379% it switches to the green payout-variance-match; at 30.5% it shows -$3.23. LawPay shows the green match note ($9,250.00). The converter shows the full SCP error in a toast and still reports 5 of 5 pages remaining. At 390px there is no horizontal overflow and the note fits (358px wide).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/payouts (net_variance)", "issue": "Exact-cent comparison flags a $0.01 rounding difference: the UberEats sample at 30% gives file_net 120.53 vs calculated 120.54, flagged true. Optionally add a small tolerance or a 'rounding only' wording for |diff| <= $0.01."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Converter error toast (sonner)", "issue": "The long SCP error message (~300 chars) in a top-right toast had its first lines cut off above the viewport in the desktop 1920x1080 screenshot. The screenshot may have caught the entry animation, but the long text is still hard to read in a toast that disappears. Consider an inline persistent error banner in ConverterPanel for 424 errors.", "selector": "[data-sonner-toast]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Splitter results", "issues": ["The ledger matrix footer label 'Variance $0.00' (debits vs credits) can be confused with the new 'Payout variance flagged' note shown right above it. Consider renaming the matrix label to 'Out of balance' or 'Debit/credit difference'."]}
+    ]
+  },
+  "test_report_links": ["/app/backend_tests/test_payout_variance.py", "/app/backend_tests/test_ledgerstream_regression.py", "/app/test_reports/pytest/pytest_iter8_variance.xml", "/app/test_reports/pytest/pytest_iter8_regression.xml"],
+  "action_items": [
+    "(Optional) Add a cent tolerance or 'rounding' wording for $0.01 variances.",
+    "(Optional) Show the 424 Textract SCP error as an inline banner in the converter instead of only a toast.",
+    "(Optional) Rename the ledger matrix 'Variance' label to avoid confusion with the payout variance note.",
+    "User/AWS action still required: remove the Organizations SCP deny on textract:AnalyzeDocument for IAM user LedgerStream_Engine."
+  ],
+  "critical_code_review_comments": [
+    "net_variance() relies on ledger['lines'][0] being the cash deposit line. That holds for both _trust_ledger and build_ledger today, but it is fragile if line order changes. Consider tagging the deposit line (e.g. a role: 'deposit' field) or returning the deposit amount from build_ledger explicitly.",
+    "The SCP check matches the substring 'service control policy' in the AWS error message. It works now, but AWS message wording can change. Consider also checking Code == 'AccessDeniedException' together with 'explicit deny'.",
+    "Payouts created before this feature have no net_variance field. VarianceNote handles undefined/null by rendering nothing, which is fine."
+  ],
+  "updated_files": ["/app/backend_tests/test_payout_variance.py (new)"],
+  "success_rate": {"backend": "100% (30/30: 21 regression + 9 new)", "frontend": "100%"},
+  "test_credentials": "demo@ledgerstream.ai / LedgerDemo#2026",
+  "seed_data_creation": "The TEST_VarianceClient client and its payouts were created and cleaned up by fixtures. The 3 payouts I created through the UI (Burger Shack Toast + LawPay, Downtown Boutique Toast) were deleted. One pre-existing Downtown Boutique Toast payout (pay_df8ab1854427, created before my runs) was left in place. Demo user is plan free / pages_used 0 / trial. Contact form was not submitted.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest /app/backend_tests -v (30 tests). A Toast sample rate of 30.5379% makes the variance match exactly (file net 5919.87, gross 8522.45). Testids: payout-variance-note, variance-file-net, variance-calculated-net, variance-difference, payout-variance-match, commission-rate-input (live recalculate with a 350ms debounce), pdf-upload-dropzone-input, converter-pages-remaining. Textract still returns 424 because of the AWS SCP."
+}

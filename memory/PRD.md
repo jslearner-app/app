@@ -41,6 +41,8 @@ CPA firm founders cleaning restaurant backlogs; solo virtual e-commerce bookkeep
 - 2026-10-24: Contact confirmation email to the sender's account email ("We got your message", desk-specific response time, reference id); failure is logged and doesn't block the desk email
 - 2026-10-24: Production refactor for Vercel + AWS Lambda (single lambda_function.py, DATABASE_URL, NEXT_PUBLIC_API_URL, legacy backend modules/tests and old api/index.py + ledgerstream_core removed). Fixed Mangum warm-invocation bug (client closed after each call).
 - Tested: iteration_1..7 (iteration_7: backend 21/21 via /app/backend_tests, frontend flows, Lambda warm invocations re-verified)
+- 2026-10-24: Payout Variance Note: backend net_variance {file_net, calculated_net (first ledger debit line), difference, flagged on any cent difference} on create + recalculate; splitter shows amber note when flagged, green match note otherwise. Ledger footer label renamed to "Debit/credit difference".
+- 2026-10-24: Textract: the AWS Organizations SCP denies textract:AnalyzeDocument for IAM user LedgerStream_Engine in every region (can't be fixed in code). The 424 response now explains the SCP block; the converter shows a persistent inline error banner; pages are not charged. Tested iteration_8 (backend 30/30, frontend pass)
 
 ## Backlog
 - P0: Add AWS keys and verify live Textract parsing on real statements
