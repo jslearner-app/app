@@ -111,6 +111,7 @@ export default function Landing() {
       <footer className="border-t border-slate-800/70">
         <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-16 py-10 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between text-sm text-slate-500">
           <Brand />
+          <Link to="/contact" className="hover:text-emerald-300" data-testid="landing-footer-contact-link">Contact Support & Sales</Link>
           <span>© {new Date().getFullYear()} LedgerStream AI. Built for bookkeeping firms.</span>
         </div>
       </footer>

@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { CreditCard, History, LayoutDashboard, LogOut, Menu, Users } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Brand } from "@/components/common/Brand";
 import { useAuth } from "@/context/AuthContext";
 import { UsageMeter } from "@/components/billing/UsageMeter";
 import { useReviewCount } from "@/hooks/useReviewCount";
+import { LowPageAlert } from "@/components/layout/LowPageAlert";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, id: "dashboard" },
@@ -79,6 +80,7 @@ const SidebarBody = ({ onNavigate }) => {
 
 export const AppShell = () => {
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
   return (
     <div className="min-h-screen bg-background">
       <aside className="hidden lg:block fixed inset-y-0 left-0 w-64 border-r border-slate-800/80 bg-[#080e21]" data-testid="app-sidebar">
@@ -98,10 +100,21 @@ export const AppShell = () => {
           </SheetContent>
         </Sheet>
       </header>
-      <main className="lg:pl-64">
-        <div className="px-4 sm:px-6 lg:px-10 py-8 lg:py-10 max-w-[1400px]">
+      <main className="lg:pl-64 flex min-h-screen flex-col">
+        <div className="flex-1 px-4 sm:px-6 lg:px-10 py-8 lg:py-10 max-w-[1400px] w-full">
+          <LowPageAlert user={user} />
           <Outlet />
         </div>
+        <footer className="app-footer px-4 sm:px-6 lg:px-10 py-6 border-t border-slate-800/80 text-xs text-slate-500 flex flex-wrap items-center gap-x-4 gap-y-2" data-testid="app-footer">
+          <span>© {new Date().getFullYear()} LedgerStream AI</span>
+          <Link to="/contact" className="hover:text-emerald-300" data-testid="footer-contact-link">Support & Sales</Link>
+          <a href="mailto:support@ledgerstreamai.com" className="hover:text-emerald-300" data-testid="footer-support-email">support@ledgerstreamai.com</a>
+          {/* Third-party floating support widget mount (Voiceflow / Crisp).
+              Uncomment and load the vendor script from public/index.html; the .support-widget-root
+              class pins it bottom-right and .app-footer reserves space so it never covers grid action buttons.
+          <div id="support-widget-root" className="support-widget-root" aria-label="Customer support chat" />
+          */}
+        </footer>
       </main>
     </div>
   );

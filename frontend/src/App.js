@@ -12,6 +12,7 @@ import Clients from "@/pages/Clients";
 import History from "@/pages/History";
 import Billing from "@/pages/Billing";
 import Pricing from "@/pages/Pricing";
+import Contact from "@/pages/Contact";
 import { PaymentSuccess, PaymentCancel } from "@/pages/PaymentResult";
 
 function AppRouter() {
@@ -22,6 +23,7 @@ function AppRouter() {
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<AuthPage mode="login" />} />
       <Route path="/register" element={<AuthPage mode="register" />} />
+      <Route path="/contact" element={<Contact />} />
       <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/clients" element={<Clients />} />

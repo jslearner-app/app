@@ -59,6 +59,12 @@
         <title>LedgerStream AI | The Financial Ingestion Hub for Modern Bookkeepers</title>
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
         <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
+        <!-- ===== Third-party header scripts (analytics, tag managers, widget loaders) =====
+             Paste vendor snippets inside the script block below and remove the comment markers.
+        <script type="text/javascript">
+            // Example (Crisp): window.$crisp = []; window.CRISP_WEBSITE_ID = "YOUR_CRISP_WEBSITE_ID";
+        </script>
+        ===== End third-party header scripts ===== -->
     </head>
     <body>
         <noscript>You need to enable JavaScript to run this app.</noscript>
@@ -144,5 +150,22 @@
                 },
             });
         </script>
+        <!-- ===== Footer: floating customer support widget (Voiceflow / Crisp) =====
+             Uncomment to mount. .support-widget-root (src/index.css) pins the launcher bottom-right
+             below dialogs, and app pages reserve bottom space so it never covers grid action buttons.
+        <div id="support-widget-root" class="support-widget-root" aria-label="Customer support chat"></div>
+        <script type="text/javascript">
+            // Voiceflow example:
+            // (function (d, t) {
+            //   var v = d.createElement(t), s = d.getElementsByTagName(t)[0];
+            //   v.onload = function () { window.voiceflow.chat.load({ verify: { projectID: "YOUR_PROJECT_ID" },
+            //     url: "https://general-runtime.voiceflow.com", versionID: "production",
+            //     render: { mode: "overlay", target: document.getElementById("support-widget-root") } }); };
+            //   v.src = "https://cdn.voiceflow.com/widget-next/bundle.mjs"; v.type = "text/javascript"; s.parentNode.insertBefore(v, s);
+            // })(document, "script");
+            // Crisp example:
+            // (function () { var d = document, s = d.createElement("script"); s.src = "https://client.crisp.chat/l.js"; s.async = 1; d.head.appendChild(s); })();
+        </script>
+        ===== End support widget ===== -->
     </body>
 </html>

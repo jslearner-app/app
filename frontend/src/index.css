@@ -98,3 +98,20 @@
     .reveal { animation: none; opacity: 1; }
     .scan-bar { animation: none; }
 }
+
+/* Floating support widget (Voiceflow / Crisp): bottom-right, under dialogs (z-50) and toasts. */
+:root {
+    --support-widget-safe-area: 96px;
+}
+.support-widget-root {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 40;
+}
+.app-footer {
+    padding-bottom: calc(1.5rem + var(--support-widget-safe-area));
+}
+#crisp-chatbox > div > a {
+    z-index: 40 !important;
+}
