@@ -7,6 +7,7 @@ import { money, platformName, shortDate } from "@/lib/format";
 import { useClients } from "@/hooks/useClients";
 import { notifyHistoryChanged, useReviewCount } from "@/hooks/useReviewCount";
 import { PageHeader } from "@/components/common/PageHeader";
+import { Button } from "@/components/ui/button";
 
 const KINDS = [{ id: "all", label: "All" }, { id: "statement", label: "Statements" }, { id: "payout", label: "Payouts" }, { id: "needs_review", label: "Needs review" }, { id: "variance", label: "Variance" }];
 
@@ -82,6 +83,13 @@ export default function History() {
     load();
   }, [load]);
 
+  const exportVariance = () => {
+    const client = clients.find((c) => c.id === clientId);
+    const slug = client ? client.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") : "all_clients";
+    const qs = client ? `?client_id=${client.id}` : "";
+    downloadFile(`/history/variance-export${qs}`, `payout_variances_${slug}.csv`).catch((e) => toast.error(errMsg(e)));
+  };
+
   const remove = async (it) => {
     try {
       await api.delete(`/history/${it.kind}/${it.id}`);
@@ -118,6 +126,11 @@ export default function History() {
             {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
           </SelectContent>
         </Select>
+        {kind === "variance" && (
+          <Button onClick={exportVariance} disabled={!items?.length} variant="outline" className="sm:ml-auto border-amber-500/40 bg-transparent text-amber-200 hover:bg-amber-950/40" data-testid="history-variance-export-button">
+            <Download className="h-4 w-4 mr-1.5" />Export variance CSV{clientId === "all" ? " (all clients)" : ""}
+          </Button>
+        )}
       </div>
       <div className="surface overflow-x-auto">
         <table className="w-full text-sm min-w-[880px]">

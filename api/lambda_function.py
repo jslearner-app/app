@@ -1308,6 +1308,37 @@ async def review_count(user: dict = Depends(get_current_user)):
     }
 
 
+VARIANCE_HEADERS = ["Date", "Client", "Platform", "File", "Gross Sales", "Commission / Fee Basis",
+                    "File Net Payout", "Journal Deposit", "Difference"]
+
+
+def variance_to_csv(payouts: list) -> bytes:
+    rows = [[
+        p["created_at"][:10], p.get("client_name", ""), PLATFORM_NAMES.get(p["platform"], p["platform"]), p["filename"],
+        f"{p['gross_total']:.2f}",
+        f"{p['fee_total']:.2f} fees from file" if p["platform"] in FILE_FEE_PLATFORMS else f"{p['commission_rate']:g}% commission",
+        f"{p['net_variance']['file_net']:.2f}", f"{p['net_variance']['calculated_net']:.2f}",
+        f"{p['net_variance']['difference']:.2f}",
+    ] for p in payouts]
+    if rows:
+        total = sum((d2(p["net_variance"]["difference"]) for p in payouts), Decimal("0"))
+        rows.append(["Total", "", "", f"{len(payouts)} flagged payout(s)", "", "", "", "", f"{total:.2f}"])
+    return pd.DataFrame(rows, columns=VARIANCE_HEADERS).to_csv(index=False).encode("utf-8")
+
+
+@app.get("/api/history/variance-export")
+async def variance_export(client_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    query = {"owner_id": user["user_id"], "net_variance.flagged": True}
+    label = "all_clients"
+    if client_id:
+        client_doc = await get_owned_client(user["user_id"], client_id)
+        query["client_id"] = client_id
+        label = re.sub(r"[^a-z0-9]+", "_", client_doc["name"].lower()).strip("_") or "client"
+    payouts = await db.payouts.find(query, LIST_PROJECTION).sort("created_at", 1).to_list(5000)
+    return Response(variance_to_csv(payouts), media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="payout_variances_{label}.csv"'})
+
+
 @app.delete("/api/history/{kind}/{item_id}")
 async def delete_history(kind: str, item_id: str, user: dict = Depends(get_current_user)):
     coll = {"statement": db.statements, "payout": db.payouts}.get(kind)
