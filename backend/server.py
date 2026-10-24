@@ -26,9 +26,11 @@ async def root():
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ["CORS_ORIGINS"].split(","),
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[o.strip() for o in os.environ["CORS_ORIGINS"].split(",") if o.strip()],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Stripe-Signature", "X-LedgerStream-Signature"],
+    expose_headers=["Content-Disposition"],
+    max_age=600,
 )
 
 DEMO_CLIENTS = [

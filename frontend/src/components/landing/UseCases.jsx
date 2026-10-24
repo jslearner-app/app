@@ -30,7 +30,7 @@ const USE_CASES = [
     id: "lawpay-splitter",
     icon: Landmark,
     title: "LawPay trust account deposit splitter QBO",
-    text: "Split law-firm payment deposits into gross receipts and processing fees so every trust account deposit lands in QuickBooks Online as a balanced journal entry.",
+    text: "Upload a LawPay deposit export. Each trust deposit is recorded at its full amount against Client Trust Liability, and processing fees are charged to your operating account, giving you a balanced QuickBooks Online journal entry that keeps fees out of trust.",
   },
   {
     id: "messy-statements",

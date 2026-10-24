@@ -2,13 +2,14 @@
 import io
 import os
 import uuid
-from decimal import Decimal, ROUND_HALF_UP
 
 import boto3
 import pandas as pd
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from pypdf import PdfReader, PdfWriter
+
+from .money import d2
 
 COLUMNS = ["date", "description", "reference", "withdrawal", "deposit", "balance"]
 EXPORT_HEADERS = ["Date", "Description", "Reference/Check #", "Withdrawals", "Deposits", "Balance"]
@@ -21,7 +22,7 @@ COLUMN_KEYWORDS = [
     ("date", ("date", "posted")),
     ("description", ("description", "details", "transaction", "memo", "payee")),
 ]
-CENT = Decimal("0.01")
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
 class TextractNotConfigured(Exception):
@@ -30,10 +31,6 @@ class TextractNotConfigured(Exception):
 
 class TextractError(Exception):
     pass
-
-
-def d2(value) -> Decimal:
-    return Decimal(str(value)).quantize(CENT, rounding=ROUND_HALF_UP)
 
 
 def count_pages(pdf_bytes: bytes) -> int:
@@ -164,55 +161,6 @@ def dataframe_to_rows(df: pd.DataFrame) -> list:
         rec["description"] = rec.get("description") or ""
         rows.append(rec)
     return rows
-
-
-def _net(row) -> Decimal:
-    return (d2(row["deposit"]) if row.get("deposit") is not None else Decimal("0")) - (
-        d2(row["withdrawal"]) if row.get("withdrawal") is not None else Decimal("0"))
-
-
-def reconcile(rows: list) -> dict:
-    """Checks opening balance + deposits - withdrawals against each printed running balance and the closing balance."""
-    first = next((i for i, r in enumerate(rows) if r.get("balance") is not None), None)
-    if first is None:
-        return {"status": "unavailable", "message": "No running balance column was found on this statement."}
-    opening = d2(rows[first]["balance"]) - _net(rows[first])
-    for r in rows[:first]:
-        opening -= _net(r)
-    running, mismatches = opening, []
-    for idx, r in enumerate(rows):
-        running += _net(r)
-        if r.get("balance") is None:
-            continue
-        printed = d2(r["balance"])
-        if printed != running:
-            mismatches.append({"id": r["id"], "row": idx + 1, "date": r.get("date", ""),
-                               "expected": float(running), "actual": float(printed),
-                               "difference": float(printed - running)})
-            running = printed
-    computed_closing = opening + sum((_net(r) for r in rows), Decimal("0"))
-    reported_closing = d2(next(r["balance"] for r in reversed(rows) if r.get("balance") is not None))
-    return {
-        "status": "mismatch" if mismatches or computed_closing != reported_closing else "reconciled",
-        "opening_balance": float(opening),
-        "computed_closing": float(computed_closing),
-        "reported_closing": float(reported_closing),
-        "difference": float(reported_closing - computed_closing),
-        "mismatched_rows": mismatches,
-    }
-
-
-def summarize(rows: list) -> dict:
-    withdrawals = sum((d2(r["withdrawal"]) for r in rows if r.get("withdrawal") is not None), Decimal("0"))
-    deposits = sum((d2(r["deposit"]) for r in rows if r.get("deposit") is not None), Decimal("0"))
-    balances = [r["balance"] for r in rows if r.get("balance") is not None]
-    return {
-        "transactions": len(rows),
-        "total_withdrawals": float(withdrawals),
-        "total_deposits": float(deposits),
-        "closing_balance": balances[-1] if balances else None,
-        "reconciliation": reconcile(rows),
-    }
 
 
 def run_pipeline(pdf_bytes: bytes) -> list:

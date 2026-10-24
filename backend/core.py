@@ -2,6 +2,9 @@ from dotenv import load_dotenv
 from pathlib import Path
 load_dotenv(Path(__file__).parent / ".env")
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "api"))
+
 import os
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -9,10 +12,10 @@ from datetime import datetime, timezone, timedelta
 import bcrypt
 import jwt
 from fastapi import Request, HTTPException
-from motor.motor_asyncio import AsyncIOMotorClient
 
-client = AsyncIOMotorClient(os.environ["MONGO_URL"])
-db = client[os.environ["DB_NAME"]]
+from ledgerstream_core.db import connect
+
+client, db = connect()
 
 JWT_ALGORITHM = "HS256"
 FREE_PAGE_LIMIT = 5

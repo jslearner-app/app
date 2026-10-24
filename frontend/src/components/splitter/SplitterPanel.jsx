@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, downloadFile, errMsg } from "@/lib/api";
-import { money, PLATFORMS } from "@/lib/format";
+import { money, platformMeta } from "@/lib/format";
 import { ClientSelect } from "@/components/common/ClientSelect";
 import { FileDropzone } from "@/components/common/FileDropzone";
 import { IsolationBadge } from "@/components/trust/TrustSignals";
@@ -19,6 +19,12 @@ export const SplitterPanel = ({ clients, onConverted }) => {
   const [loading, setLoading] = useState(false);
   const [payout, setPayout] = useState(null);
   const lastRate = useRef(null);
+  const meta = platformMeta(platform);
+
+  const choosePlatform = (id) => {
+    setPlatform(id);
+    setRate(platformMeta(id).defaultRate);
+  };
 
   useEffect(() => {
     if (!clientId && clients.length) setClientId(clients[0].id);
@@ -73,20 +79,20 @@ export const SplitterPanel = ({ clients, onConverted }) => {
           <label className="text-xs uppercase tracking-wider text-slate-400">Client profile</label>
           <div className="mt-2"><ClientSelect clients={clients} value={clientId} onChange={setClientId} testId="splitter-client-select" /></div>
         </div>
-        <PlatformPicker value={platform} onChange={setPlatform} />
+        <PlatformPicker value={platform} onChange={choosePlatform} disabled={!!payout} />
         <div>
-          <label htmlFor="commission-rate" className="text-xs uppercase tracking-wider text-slate-400">Platform Commission Rate %</label>
+          <label htmlFor="commission-rate" className="text-xs uppercase tracking-wider text-slate-400">{meta.id === "lawpay" ? "Processing Fee Rate %" : "Platform Commission Rate %"}</label>
           <div className="mt-2 flex items-center gap-3">
             <Input id="commission-rate" type="number" min="0" max="100" step="0.1" value={rate} onChange={(e) => setRate(e.target.value)} className="h-11 w-28 num bg-slate-950/50 border-slate-700" data-testid="commission-rate-input" />
-            <RatePresets value={rate} onChange={setRate} />
+            <RatePresets value={rate} onChange={setRate} presets={meta.presets} />
           </div>
         </div>
         {!payout && (
           <div>
-            <FileDropzone accept=".csv" title="Drop platform payout CSV" hint="Toast, DoorDash, UberEats, Shopify or Stripe export" onFile={setFile} selectedName={file?.name} testId="payout-upload-dropzone" />
+            <FileDropzone accept=".csv" title="Drop platform payout CSV" hint="Toast, DoorDash, UberEats, Shopify, Stripe or LawPay export" onFile={setFile} selectedName={file?.name} testId="payout-upload-dropzone" />
             <IsolationBadge testId="splitter-isolation-badge" />
             <button onClick={sample} className="mt-3 text-xs font-medium text-emerald-400 hover:text-emerald-300" data-testid="download-sample-csv-button">
-              Download a sample {PLATFORMS.find((p) => p.id === platform)?.name} CSV
+              Download a sample {meta.name} CSV
             </button>
           </div>
         )}
@@ -116,13 +122,15 @@ export const SplitterPanel = ({ clients, onConverted }) => {
           </>
         ) : (
           <div className="h-full min-h-[280px] rounded-xl border border-dashed border-slate-800 flex flex-col items-center justify-center text-center p-8" data-testid="ledger-empty-state">
-            <div className="grid grid-cols-3 gap-2 text-[10px] uppercase tracking-wider text-slate-500 mb-4">
-              <span className="rounded border border-slate-800 px-2 py-1">Dr Bank Clearing</span>
-              <span className="rounded border border-slate-800 px-2 py-1">Dr Commissions</span>
-              <span className="rounded border border-slate-800 px-2 py-1">Cr Gross Sales</span>
+            <div className="flex flex-wrap justify-center gap-2 text-[10px] uppercase tracking-wider text-slate-500 mb-4" data-testid="ledger-empty-accounts">
+              {meta.ledger.map((a) => <span key={a} className="rounded border border-slate-800 px-2 py-1">{a}</span>)}
             </div>
             <p className="text-slate-300 font-medium">Your balanced journal entry appears here</p>
-            <p className="mt-1 text-sm text-slate-500 max-w-sm">Upload a platform statement and we will split gross sales into net cash and commission expense.</p>
+            <p className="mt-1 text-sm text-slate-500 max-w-sm">
+              {meta.id === "lawpay"
+                ? "Upload a LawPay deposit export. The full deposit stays in trust and processing fees are charged to your operating account."
+                : "Upload a platform statement and we will split gross sales into net cash and commission expense."}
+            </p>
           </div>
         )}
       </div>

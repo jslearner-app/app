@@ -1,12 +1,15 @@
 """Merchant payout splitter: platform CSV -> gross/net detection -> balanced double-entry matrix."""
 import io
 from datetime import date
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 
 import pandas as pd
 
-CENT = Decimal("0.01")
-PLATFORMS = ["toast", "doordash", "ubereats", "shopify", "stripe"]
+from .money import d2
+
+PLATFORMS = ["toast", "doordash", "ubereats", "shopify", "stripe", "lawpay"]
+PLATFORM_NAMES = {"toast": "Toast", "doordash": "DoorDash", "ubereats": "UberEats", "shopify": "Shopify",
+                  "stripe": "Stripe", "lawpay": "LawPay"}
 GROSS_KEYWORDS = ("gross", "subtotal", "sales", "order total", "amount", "total")
 NET_KEYWORDS = ("net", "payout", "deposit")
 QBO_HEADERS = ["Journal No", "Journal Date", "Account", "Debits", "Credits", "Description", "Name", "Memo"]
@@ -27,11 +30,11 @@ SAMPLE_CSV = {
     "stripe": "id,Created (UTC),Gross,Fee,Net\n"
               "txn_1,2026-09-10,250.00,7.55,242.45\ntxn_2,2026-09-10,99.00,3.17,95.83\n"
               "txn_3,2026-09-11,1200.00,35.10,1164.90\n",
+    "lawpay": "Date,Transaction ID,Client Matter,Deposit Account,Amount,Fee,Net Deposit\n"
+              "2026-09-12,LP-90311,Harper v. Lane - Retainer,Trust,5000.00,147.50,5000.00\n"
+              "2026-09-12,LP-90312,Estate of Moreno - Retainer,Trust,2500.00,73.75,2500.00\n"
+              "2026-09-13,LP-90313,Kim LLC - Retainer,Trust,1750.00,51.63,1750.00\n",
 }
-
-
-def d2(value) -> Decimal:
-    return Decimal(str(value)).quantize(CENT, rounding=ROUND_HALF_UP)
 
 
 def _to_number(series: pd.Series) -> pd.Series:
@@ -75,10 +78,29 @@ def parse_platform_csv(raw: bytes) -> dict:
     }
 
 
-def build_ledger(gross_total: float, commission_rate: float) -> dict:
+def _trust_ledger(gross: Decimal, fees: Decimal, rate_pct: float) -> dict:
+    """LawPay trust deposits: full amount stays in trust, processing fees post against operating."""
+    lines = [
+        {"account": "Trust Bank Account (IOLTA)", "side": "debit", "debit": float(gross), "credit": 0.0,
+         "memo": "Full client funds deposited to trust"},
+        {"account": "Client Trust Liability", "side": "credit", "debit": 0.0, "credit": float(gross),
+         "memo": "Funds held in trust for clients"},
+        {"account": "Credit Card Processing Fees", "side": "debit", "debit": float(fees), "credit": 0.0,
+         "memo": f"LawPay processing fees @ {rate_pct:g}%"},
+        {"account": "Operating Bank Account", "side": "credit", "debit": 0.0, "credit": float(fees),
+         "memo": "Fees paid from operating, not trust"},
+    ]
+    total = gross + fees
+    return {"lines": lines, "total_debits": float(total), "total_credits": float(total),
+            "difference": 0.0, "balanced": True}
+
+
+def build_ledger(gross_total: float, commission_rate: float, platform: str = "") -> dict:
     gross = d2(gross_total)
     rate = Decimal(str(commission_rate)) / Decimal("100")
     commission = d2(gross * rate)
+    if platform == "lawpay":
+        return _trust_ledger(gross, commission, commission_rate)
     net = gross - commission
     lines = [
         {"account": "Bank Clearing Account", "side": "debit", "debit": float(net), "credit": 0.0,
@@ -102,7 +124,7 @@ def build_ledger(gross_total: float, commission_rate: float) -> dict:
 def ledger_to_qbo_csv(payout: dict) -> bytes:
     journal_no = f"LS-{payout['id'][-6:].upper()}"
     journal_date = date.today().strftime("%m/%d/%Y")
-    desc = f"{payout['platform'].title()} payout split - {payout['filename']}"
+    desc = f"{PLATFORM_NAMES.get(payout['platform'], payout['platform'])} payout split - {payout['filename']}"
     rows = [
         [journal_no, journal_date, line["account"],
          f"{line['debit']:.2f}" if line["debit"] else "",

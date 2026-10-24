@@ -1,0 +1,11 @@
+fastapi==0.110.1
+pydantic==2.14.1
+python-multipart==0.0.32
+pandas==3.0.6
+numpy==2.4.6
+pypdf==6.21.2
+openpyxl==3.1.5
+boto3==1.43.114
+botocore==1.43.114
+motor==3.7.1
+pymongo==4.18.2

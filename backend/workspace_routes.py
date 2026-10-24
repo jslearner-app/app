@@ -11,12 +11,12 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from core import db, now, new_id, get_current_user, get_owned_client, FREE_PAGE_LIMIT, PAID_PLANS
-import ledger_engine as le
-import textract_pipeline as tp
+from ledgerstream_core import payouts as le, reconciliation as rc, statements as tp
+from ledgerstream_core.schemas import StatementRows
 
 router = APIRouter(prefix="/api", tags=["workspace"])
 logger = logging.getLogger(__name__)
-MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+MAX_UPLOAD_BYTES = tp.MAX_UPLOAD_BYTES
 LIST_PROJECTION = {"_id": 0, "rows": 0}
 
 
@@ -26,20 +26,6 @@ class ClientIn(BaseModel):
     contact_email: str = Field(default="", max_length=160)
     platforms: List[str] = Field(default_factory=list)
     notes: str = Field(default="", max_length=1000)
-
-
-class RowIn(BaseModel):
-    id: str
-    date: str
-    description: str = ""
-    reference: str = ""
-    withdrawal: Optional[float] = None
-    deposit: Optional[float] = None
-    balance: Optional[float] = None
-
-
-class RowsIn(BaseModel):
-    rows: List[RowIn]
 
 
 class RateIn(BaseModel):
@@ -155,7 +141,7 @@ async def convert_statement(
         "id": new_id("stm"), "kind": "statement", "owner_id": user["user_id"],
         "client_id": client["id"], "client_name": client["name"], "filename": file.filename,
         "pages": pages, "engine": "aws_textract", "status": "completed", "rows": rows,
-        "summary": tp.summarize(rows), "created_at": now().isoformat(),
+        "summary": rc.summarize(rows), "created_at": now().isoformat(),
     }
     await db.statements.insert_one(doc)
     doc.pop("_id", None)
@@ -175,15 +161,12 @@ async def get_statement(statement_id: str, user: dict = Depends(get_current_user
 
 
 @router.put("/statements/{statement_id}/rows")
-async def save_rows(statement_id: str, body: RowsIn, user: dict = Depends(get_current_user)):
+async def save_rows(statement_id: str, body: StatementRows, user: dict = Depends(get_current_user)):
     await _owned_statement(user, statement_id)
-    rows = [r.model_dump() for r in body.rows]
-    for r in rows:
-        for k in tp.AMOUNT_COLUMNS:
-            r[k] = float(tp.d2(r[k])) if r[k] is not None else None
+    rows = rc.normalize_rows([r.model_dump() for r in body.rows])
     await db.statements.update_one(
         {"id": statement_id, "owner_id": user["user_id"]},
-        {"$set": {"rows": rows, "summary": tp.summarize(rows), "updated_at": now().isoformat()}},
+        {"$set": {"rows": rows, "summary": rc.summarize(rows), "updated_at": now().isoformat()}},
     )
     return await _owned_statement(user, statement_id)
 
@@ -217,7 +200,7 @@ async def textract_webhook(request: Request):
         raise HTTPException(status_code=404, detail="Statement not found")
     rows = tp.dataframe_to_rows(tp.blocks_to_dataframe(blocks))
     await db.statements.update_one({"id": statement_id}, {"$set": {
-        "rows": rows, "summary": tp.summarize(rows), "engine": "aws_textract",
+        "rows": rows, "summary": rc.summarize(rows), "engine": "aws_textract",
         "status": "completed", "updated_at": now().isoformat(),
     }})
     return {"ok": True, "transactions": len(rows)}
@@ -251,7 +234,7 @@ async def split_payout(
         "id": new_id("pay"), "kind": "payout", "owner_id": user["user_id"],
         "client_id": client["id"], "client_name": client["name"], "platform": platform,
         "filename": file.filename, **parsed, "commission_rate": commission_rate,
-        "ledger": le.build_ledger(parsed["gross_total"], commission_rate), "created_at": now().isoformat(),
+        "ledger": le.build_ledger(parsed["gross_total"], commission_rate, platform), "created_at": now().isoformat(),
     }
     await db.payouts.insert_one(doc)
     doc.pop("_id", None)
@@ -273,7 +256,7 @@ async def get_payout(payout_id: str, user: dict = Depends(get_current_user)):
 @router.post("/payouts/{payout_id}/recalculate")
 async def recalculate_payout(payout_id: str, body: RateIn, user: dict = Depends(get_current_user)):
     doc = await _owned_payout(user, payout_id)
-    ledger = le.build_ledger(doc["gross_total"], body.commission_rate)
+    ledger = le.build_ledger(doc["gross_total"], body.commission_rate, doc["platform"])
     await db.payouts.update_one({"id": payout_id, "owner_id": user["user_id"]},
                                 {"$set": {"commission_rate": body.commission_rate, "ledger": ledger}})
     return {**doc, "commission_rate": body.commission_rate, "ledger": ledger}
