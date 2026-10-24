@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { ConverterPanel } from "@/components/converter/ConverterPanel";
 import { SplitterPanel } from "@/components/splitter/SplitterPanel";
 import { OnboardingTrust } from "@/components/dashboard/OnboardingTrust";
+import { ContactForm } from "@/components/contact/ContactForm";
 
 const Metric = ({ label, value, testId }) => (
   <div className="surface p-5">
@@ -68,6 +69,14 @@ export default function Dashboard() {
           <SplitterPanel clients={clients} onConverted={loadSummary} />
         </TabsContent>
       </Tabs>
+      <section className="mt-14 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]" data-testid="dashboard-contact-section">
+        <div>
+          <div className="eyebrow mb-2">Need a hand?</div>
+          <h2 className="text-base md:text-lg font-semibold text-slate-50">Contact our support or sales desk</h2>
+          <p className="mt-2 text-sm text-slate-400 max-w-md">Messages go straight to our engineering or partnership team. Support replies within 12 business hours; sales quotes within 1 business day.</p>
+        </div>
+        <ContactForm compact />
+      </section>
     </div>
   );
 }

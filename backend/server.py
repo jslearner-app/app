@@ -8,6 +8,7 @@ from core import db, client, now, new_id, hash_password, verify_password
 from auth_routes import router as auth_router
 from workspace_routes import router as workspace_router
 from billing_routes import router as billing_router
+from contact_routes import router as contact_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -16,6 +17,7 @@ app = FastAPI(title="LedgerStream AI")
 app.include_router(auth_router)
 app.include_router(workspace_router)
 app.include_router(billing_router)
+app.include_router(contact_router)
 
 
 @app.get("/api/")
@@ -69,6 +71,7 @@ async def startup():
     await db.statements.create_index([("owner_id", 1), ("created_at", -1)])
     await db.payouts.create_index([("owner_id", 1), ("created_at", -1)])
     await db.payment_transactions.create_index("session_id", unique=True)
+    await db.contact_messages.create_index([("user_id", 1), ("created_at", -1)])
     await seed_demo_user()
 
 

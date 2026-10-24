@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, Briefcase, Clock, Mail } from "lucide-react";
 import { Brand } from "@/components/common/Brand";
 import { useAuth } from "@/context/AuthContext";
+import { ContactForm } from "@/components/contact/ContactForm";
 
 const CHANNELS = [
   {
@@ -73,6 +74,16 @@ export default function Contact() {
         <div className="grid gap-5 md:grid-cols-2">
           {CHANNELS.map((c, i) => <ChannelCard key={c.id} c={c} i={i} />)}
         </div>
+        <section className="mt-14 max-w-3xl" data-testid="contact-form-section">
+          <h2 className="mb-2 text-base md:text-lg font-semibold text-slate-200">Send us a message</h2>
+          {user ? (
+            <ContactForm />
+          ) : (
+            <div className="surface p-6 text-sm text-slate-400" data-testid="contact-form-signin-prompt">
+              <Link to="/login" className="font-medium text-emerald-400 hover:text-emerald-300">Sign in</Link> to send a message from your account, or email the desks above directly.
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );
