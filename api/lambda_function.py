@@ -306,6 +306,11 @@ def analyze_with_textract(pdf_bytes: bytes) -> list:
             resp = textract.analyze_document(Document={"Bytes": page_bytes}, FeatureTypes=["TABLES"])
         except ClientError as e:
             err = e.response.get("Error", {})
+            if "service control policy" in (err.get("Message") or ""):
+                raise TextractError(
+                    "Amazon Textract is blocked by your AWS Organization: a service control policy explicitly denies "
+                    "textract:AnalyzeDocument for this AWS user. An administrator of the AWS management account must "
+                    "remove that deny (or move this account out of the policy) before statements can be converted")
             raise TextractError(f"Textract rejected page {page_no}: {err.get('Code')} - {err.get('Message')}")
         except BotoCoreError as e:
             raise TextractError(f"Could not reach Amazon Textract: {e}")
@@ -593,6 +598,16 @@ def build_ledger(gross_total: float, commission_rate: float, platform: str = "",
         "difference": float(total_debits - gross),
         "balanced": total_debits == gross,
     }
+
+
+def net_variance(file_net_total, ledger: dict):
+    """Compares the file's reported net payout with the cash deposit line of the journal entry."""
+    if file_net_total is None:
+        return None
+    file_net, calculated = d2(file_net_total), d2(ledger["lines"][0]["debit"])
+    diff = file_net - calculated
+    return {"file_net": float(file_net), "calculated_net": float(calculated),
+            "difference": float(diff), "flagged": diff != 0}
 
 
 def ledger_to_qbo_csv(payout: dict) -> bytes:
@@ -1121,11 +1136,12 @@ async def split_payout(
         raise HTTPException(status_code=400, detail=str(e))
     if platform in FILE_FEE_PLATFORMS:
         commission_rate = effective_rate(parsed["gross_total"], parsed["fee_total"])
+    ledger = build_ledger(parsed["gross_total"], commission_rate, platform, parsed["fee_total"])
     doc = {
         "id": new_id("pay"), "kind": "payout", "owner_id": user["user_id"],
         "client_id": client_doc["id"], "client_name": client_doc["name"], "platform": platform,
         "filename": file.filename, **parsed, "commission_rate": commission_rate,
-        "ledger": build_ledger(parsed["gross_total"], commission_rate, platform, parsed["fee_total"]),
+        "ledger": ledger, "net_variance": net_variance(parsed["file_net_total"], ledger),
         "created_at": now().isoformat(),
     }
     await db.payouts.insert_one(doc)
@@ -1151,9 +1167,10 @@ async def recalculate_payout(payout_id: str, body: RateIn, user: dict = Depends(
     if doc["platform"] in FILE_FEE_PLATFORMS:
         raise HTTPException(status_code=400, detail="LawPay fees are read from the file and can't be recalculated with a rate")
     ledger = build_ledger(doc["gross_total"], body.commission_rate, doc["platform"])
-    await db.payouts.update_one({"id": payout_id, "owner_id": user["user_id"]},
-                                {"$set": {"commission_rate": body.commission_rate, "ledger": ledger}})
-    return {**doc, "commission_rate": body.commission_rate, "ledger": ledger}
+    update = {"commission_rate": body.commission_rate, "ledger": ledger,
+              "net_variance": net_variance(doc.get("file_net_total"), ledger)}
+    await db.payouts.update_one({"id": payout_id, "owner_id": user["user_id"]}, {"$set": update})
+    return {**doc, **update}
 
 
 @app.get("/api/payouts/{payout_id}/qbo")

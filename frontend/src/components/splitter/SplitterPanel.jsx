@@ -9,6 +9,7 @@ import { ClientSelect } from "@/components/common/ClientSelect";
 import { FileDropzone } from "@/components/common/FileDropzone";
 import { IsolationBadge } from "@/components/trust/TrustSignals";
 import { LedgerMatrix } from "./LedgerMatrix";
+import { VarianceNote } from "./VarianceNote";
 import { PlatformPicker, RatePresets } from "./SplitterControls";
 
 export const SplitterPanel = ({ clients, onConverted }) => {
@@ -125,6 +126,7 @@ export const SplitterPanel = ({ clients, onConverted }) => {
                 <div className="surface px-4 py-3"><div className="text-[11px] uppercase tracking-wider text-slate-500">Net per file</div><div className="num mt-1 text-slate-100" data-testid="payout-file-net">{payout.file_net_total == null ? "Not found" : money(payout.file_net_total)}</div></div>
               )}
             </div>
+            <VarianceNote variance={payout.net_variance} fileFees={platformMeta(payout.platform).fileFees} />
             <LedgerMatrix ledger={payout.ledger} />
             <Button onClick={qbo} disabled={!payout.ledger.balanced} className="h-11 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-semibold" data-testid="download-qbo-csv-button">
               <Download className="h-4 w-4 mr-2" />Download QuickBooks Journal Entry CSV
