@@ -8,7 +8,12 @@ import { useClients } from "@/hooks/useClients";
 import { notifyHistoryChanged, useReviewCount } from "@/hooks/useReviewCount";
 import { PageHeader } from "@/components/common/PageHeader";
 
-const KINDS = [{ id: "all", label: "All" }, { id: "statement", label: "Statements" }, { id: "payout", label: "Payouts" }, { id: "needs_review", label: "Needs review" }];
+const KINDS = [{ id: "all", label: "All" }, { id: "statement", label: "Statements" }, { id: "payout", label: "Payouts" }, { id: "needs_review", label: "Needs review" }, { id: "variance", label: "Variance" }];
+
+const EMPTY_COPY = {
+  needs_review: "No statements need review. Everything reconciles.",
+  variance: "No payouts with a variance. Every journal entry matches its file's net total.",
+};
 
 const exportItem = (it) =>
   (it.kind === "statement"
@@ -22,8 +27,21 @@ const REC_BADGES = {
   unavailable: { label: "No balance column", cls: "border-slate-700 bg-slate-900 text-slate-400" },
 };
 
+const VarianceBadge = ({ it }) => {
+  const v = it.net_variance;
+  if (!v) return <span className="text-slate-600">—</span>;
+  const cls = v.flagged ? "border-amber-500/40 bg-amber-950 text-amber-300" : "border-emerald-500/40 bg-emerald-950 text-emerald-300";
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap num ${cls}`} data-testid={`history-variance-badge-${it.id}`} data-flagged={v.flagged}
+      title={v.flagged ? `File net ${money(v.file_net)} vs journal deposit ${money(v.calculated_net)}` : "Journal deposit matches the file's net total"}>
+      {v.flagged ? `Variance ${money(v.difference)}` : "Matches file"}
+    </span>
+  );
+};
+
 const RecBadge = ({ it }) => {
-  const status = it.kind === "statement" ? it.summary?.reconciliation?.status : null;
+  if (it.kind === "payout") return <VarianceBadge it={it} />;
+  const status = it.summary?.reconciliation?.status;
   const badge = REC_BADGES[status];
   if (!badge) return <span className="text-slate-600">—</span>;
   return (
@@ -46,6 +64,7 @@ export default function History() {
   const [kind, setKind] = useState("all");
   const [items, setItems] = useState(null);
   const reviewCount = useReviewCount();
+  const varianceCount = useReviewCount("variance");
 
   const load = useCallback(async () => {
     const params = {};
@@ -85,6 +104,9 @@ export default function History() {
               {k.label}
               {k.id === "needs_review" && reviewCount > 0 && (
                 <span className="rounded-full bg-amber-400/15 border border-amber-400/40 px-1.5 text-[11px] font-semibold num text-amber-300" data-testid="history-review-count">{reviewCount}</span>
+              )}
+              {k.id === "variance" && varianceCount > 0 && (
+                <span className="rounded-full bg-amber-400/15 border border-amber-400/40 px-1.5 text-[11px] font-semibold num text-amber-300" data-testid="history-variance-count">{varianceCount}</span>
               )}
             </button>
           ))}
@@ -129,7 +151,7 @@ export default function History() {
               </tr>
             ))}
             {items && !items.length && (
-              <tr><td colSpan={7} className="px-4 py-12 text-slate-500" data-testid="history-empty-state"><div className="sticky left-4 max-w-[calc(100vw-5rem)] sm:max-w-none sm:text-center">{kind === "needs_review" ? "No statements need review. Everything reconciles." : "No conversions yet. Head to the Dashboard to process your first file."}</div></td></tr>
+              <tr><td colSpan={7} className="px-4 py-12 text-slate-500" data-testid="history-empty-state"><div className="sticky left-4 max-w-[calc(100vw-5rem)] sm:max-w-none sm:text-center">{EMPTY_COPY[kind] || "No conversions yet. Head to the Dashboard to process your first file."}</div></td></tr>
             )}
           </tbody>
         </table>

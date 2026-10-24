@@ -30,6 +30,10 @@ from mangum import Mangum
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from pypdf import PdfReader, PdfWriter
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
 from starlette.middleware.cors import CORSMiddleware
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -401,6 +405,78 @@ def dataframe_to_rows(df: pd.DataFrame) -> list:
 
 def run_statement_pipeline(pdf_bytes: bytes) -> list:
     return dataframe_to_rows(blocks_to_dataframe(analyze_with_textract(pdf_bytes)))
+
+
+# ---------- Textract end-to-end connection check (sample statement, no pages charged) ----------
+DIAG_HEADER = ["Date", "Description", "Reference", "Withdrawals", "Deposits", "Balance"]
+DIAG_ROWS = [
+    ["09/01/2026", "Opening deposit", "", "", "1,000.00", "1,000.00"],
+    ["09/02/2026", "Office supplies", "1001", "150.25", "", "849.75"],
+    ["09/03/2026", "Client payment", "", "", "420.00", "1,269.75"],
+]
+DIAG_COOLDOWN_SECONDS = 30
+
+
+def build_sample_statement_pdf() -> bytes:
+    buf = io.BytesIO()
+    table = Table([DIAG_HEADER, *DIAG_ROWS])
+    table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.black), ("FONTSIZE", (0, 0), (-1, -1), 10)]))
+    SimpleDocTemplate(buf, pagesize=letter).build(
+        [Paragraph("LedgerStream Diagnostic Bank - Sample Statement", getSampleStyleSheet()["Title"]), table])
+    return buf.getvalue()
+
+
+def _textract_failure(e: ClientError):
+    err = e.response.get("Error", {})
+    code, msg = err.get("Code", ""), err.get("Message", "")
+    if "service control policy" in msg:
+        return "scp_blocked", ("Your AWS Organization's service control policy explicitly denies textract:AnalyzeDocument. "
+                                "An administrator of the AWS management account must remove that deny.")
+    if code == "AccessDeniedException":
+        return "iam_denied", ("This AWS user has no permission for textract:AnalyzeDocument. Attach the "
+                               "AmazonTextractFullAccess policy or allow textract:AnalyzeDocument.")
+    if code in ("UnrecognizedClientException", "InvalidSignatureException"):
+        return "invalid_keys", "AWS rejected these keys. Check the access key ID and secret."
+    if code == "SubscriptionRequiredException":
+        return "not_subscribed", "Amazon Textract isn't enabled for this AWS account yet."
+    return "textract_error", f"{code}: {msg}"
+
+
+def run_textract_diagnostic() -> dict:
+    steps = []
+
+    def step(key, label, ok, detail):
+        steps.append({"id": key, "label": label, "ok": ok, "detail": detail})
+
+    configured = textract_enabled()
+    step("config", "AWS keys configured", configured, "Access key, secret and region are set" if configured
+         else "Add AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_REGION")
+    if not configured:
+        return {"status": "not_configured", "steps": steps}
+    cfg = textract_config()
+    try:
+        arn = boto3.client("sts", **cfg).get_caller_identity()["Arn"]
+        step("credentials", "AWS credentials valid", True, f"Signed in as {arn.split(':')[-1]}")
+    except (ClientError, BotoCoreError):
+        step("credentials", "AWS credentials valid", False, "AWS rejected these keys. Check the access key ID and secret.")
+        return {"status": "invalid_keys", "steps": steps}
+    try:
+        blocks = textract_client().analyze_document(
+            Document={"Bytes": build_sample_statement_pdf()}, FeatureTypes=["TABLES"])["Blocks"]
+    except ClientError as e:
+        status, detail = _textract_failure(e)
+        step("textract", "Textract access allowed", False, detail)
+        return {"status": status, "steps": steps}
+    except BotoCoreError as e:
+        step("textract", "Textract access allowed", False, f"Could not reach Amazon Textract in {cfg['region_name']}: {e}")
+        return {"status": "unreachable", "steps": steps}
+    step("textract", "Textract access allowed", True, f"Amazon Textract answered in {cfg['region_name']}")
+    rows = dataframe_to_rows(blocks_to_dataframe(blocks))
+    rec = reconcile(rows)
+    ok = len(rows) == len(DIAG_ROWS) and rec["status"] == "reconciled"
+    step("pipeline", "Sample statement parsed and reconciled", ok,
+         f"{len(rows)} of {len(DIAG_ROWS)} transactions extracted, reconciliation: {rec['status']}")
+    return {"status": "ready" if ok else "parse_mismatch", "steps": steps}
 
 
 def rows_to_export(rows: list, fmt: str) -> bytes:
@@ -1011,9 +1087,27 @@ async def _read_upload(file: UploadFile) -> bytes:
     return raw
 
 
+async def _last_textract_check(user_id: str):
+    return await db.textract_checks.find_one({"user_id": user_id}, {"_id": 0, "user_id": 0}, sort=[("checked_at", -1)])
+
+
 @app.get("/api/statements/engine")
 async def statement_engine(user: dict = Depends(get_current_user)):
-    return {"engine": "aws_textract", "configured": textract_enabled(), "region": os.environ.get("AWS_REGION", "")}
+    return {"engine": "aws_textract", "configured": textract_enabled(), "region": os.environ.get("AWS_REGION", ""),
+            "last_check": await _last_textract_check(user["user_id"])}
+
+
+@app.post("/api/statements/engine/check")
+async def check_textract(user: dict = Depends(get_current_user)):
+    last = await _last_textract_check(user["user_id"])
+    if last and _as_utc(last["checked_at"]) > now() - timedelta(seconds=DIAG_COOLDOWN_SECONDS):
+        raise HTTPException(status_code=429, detail=f"Please wait {DIAG_COOLDOWN_SECONDS} seconds between connection checks")
+    result = await run_in_threadpool(run_textract_diagnostic)
+    doc = {"user_id": user["user_id"], **result, "checked_at": now().isoformat()}
+    await db.textract_checks.insert_one(doc)
+    doc.pop("_id", None)
+    doc.pop("user_id", None)
+    return doc
 
 
 @app.post("/api/statements")
@@ -1193,6 +1287,10 @@ async def history(client_id: Optional[str] = None, kind: Optional[str] = None, u
         return await db.statements.find(
             {**query, "summary.reconciliation.status": "mismatch"}, LIST_PROJECTION
         ).sort("created_at", -1).to_list(1000)
+    if kind == "variance":
+        return await db.payouts.find(
+            {**query, "net_variance.flagged": True}, LIST_PROJECTION
+        ).sort("created_at", -1).to_list(1000)
     items = []
     if kind in (None, "statement"):
         items += await db.statements.find(query, LIST_PROJECTION).to_list(1000)
@@ -1203,8 +1301,11 @@ async def history(client_id: Optional[str] = None, kind: Optional[str] = None, u
 
 @app.get("/api/history/review-count")
 async def review_count(user: dict = Depends(get_current_user)):
-    n = await db.statements.count_documents({"owner_id": user["user_id"], "summary.reconciliation.status": "mismatch"})
-    return {"needs_review": n}
+    owner = user["user_id"]
+    return {
+        "needs_review": await db.statements.count_documents({"owner_id": owner, "summary.reconciliation.status": "mismatch"}),
+        "variance": await db.payouts.count_documents({"owner_id": owner, "net_variance.flagged": True}),
+    }
 
 
 @app.delete("/api/history/{kind}/{item_id}")
@@ -1528,6 +1629,9 @@ async def ensure_initialized():
     await db.payouts.create_index([("owner_id", 1), ("created_at", -1)])
     await db.payment_transactions.create_index("session_id", unique=True)
     await db.contact_messages.create_index([("user_id", 1), ("created_at", -1)])
+    await db.textract_checks.create_index([("user_id", 1), ("checked_at", -1)])
+    async for p in db.payouts.find({"net_variance": {"$exists": False}}, {"_id": 0, "id": 1, "file_net_total": 1, "ledger": 1}):
+        await db.payouts.update_one({"id": p["id"]}, {"$set": {"net_variance": net_variance(p.get("file_net_total"), p["ledger"])}})
     if os.environ.get("DEMO_EMAIL") and os.environ.get("DEMO_PASSWORD"):
         await seed_demo_user()
     _initialized = True

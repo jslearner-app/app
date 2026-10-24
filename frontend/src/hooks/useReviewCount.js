@@ -6,13 +6,13 @@ const EVENT = "ledger:history-changed";
 
 export const notifyHistoryChanged = () => window.dispatchEvent(new Event(EVENT));
 
-export function useReviewCount() {
+export function useReviewCount(field = "needs_review") {
   const [count, setCount] = useState(0);
   const { pathname } = useLocation();
 
   const load = useCallback(() => {
-    api.get("/history/review-count").then(({ data }) => setCount(data.needs_review)).catch(() => {});
-  }, []);
+    api.get("/history/review-count").then(({ data }) => setCount(data[field])).catch(() => {});
+  }, [field]);
 
   useEffect(() => {
     load();

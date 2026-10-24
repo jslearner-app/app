@@ -12,6 +12,7 @@ import { IsolationBadge } from "@/components/trust/TrustSignals";
 import { ParsingLoader } from "./ParsingLoader";
 import { StatementGrid } from "./StatementGrid";
 import { ReconciliationBanner } from "./ReconciliationBanner";
+import { TextractCheck } from "./TextractCheck";
 import { notifyHistoryChanged } from "@/hooks/useReviewCount";
 
 const Stat = ({ label, value, testId, tone = "text-slate-50" }) => (
@@ -126,6 +127,7 @@ export const ConverterPanel = ({ clients, onConverted }) => {
           <label className="text-xs uppercase tracking-wider text-slate-400">Client profile</label>
           <div className="mt-2"><ClientSelect clients={clients} value={clientId} onChange={setClientId} testId="converter-client-select" /></div>
         </div>
+        {engine && <TextractCheck initial={engine.last_check} />}
         <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-400 space-y-2">
           <div className="text-slate-200 font-medium">Output columns</div>
           <p>Date · Description · Reference/Check # · Withdrawals · Deposits · Balance</p>
