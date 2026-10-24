@@ -107,22 +107,38 @@ async def payment_status(session_id: str):
             "payment_status": record["payment_status"], "plan": record.get("plan")}
 
 
+def _portal_configuration_id() -> str:
+    """Portal config that lets subscribers switch between Starter and Agency."""
+    products = []
+    for lookup_key in PLAN_LOOKUP.values():
+        price = stripe.Price.list(lookup_keys=[lookup_key], active=True, limit=1).data[0]
+        products.append({"product": price.product, "prices": [price.id]})
+    features = {
+        "invoice_history": {"enabled": True},
+        "payment_method_update": {"enabled": True},
+        "subscription_cancel": {"enabled": True, "mode": "at_period_end"},
+        "subscription_update": {"enabled": True, "default_allowed_updates": ["price"],
+                                "proration_behavior": "create_prorations", "products": products},
+    }
+    for cfg in stripe.billing_portal.Configuration.list(active=True, limit=20).auto_paging_iter():
+        if cfg.metadata.get("managed_by") == "ledgerstream":
+            return stripe.billing_portal.Configuration.modify(cfg.id, features=features).id
+    return stripe.billing_portal.Configuration.create(
+        business_profile={"headline": "LedgerStream AI billing"}, features=features,
+        metadata={"managed_by": "ledgerstream"},
+    ).id
+
+
 @router.post("/billing/portal")
 async def billing_portal(body: PortalIn, user: dict = Depends(get_current_user)):
     customer = user.get("stripe_customer_id")
     if not customer or user.get("plan") not in PAID_PLANS:
         raise HTTPException(status_code=400, detail="No active subscription to manage yet")
     try:
-        if not stripe.billing_portal.Configuration.list(limit=1).data:
-            stripe.billing_portal.Configuration.create(
-                business_profile={"headline": "LedgerStream AI billing"},
-                features={
-                    "invoice_history": {"enabled": True},
-                    "payment_method_update": {"enabled": True},
-                    "subscription_cancel": {"enabled": True, "mode": "at_period_end"},
-                },
-            )
-        session = stripe.billing_portal.Session.create(customer=customer, return_url=f"{body.origin_url.rstrip('/')}/billing")
+        session = stripe.billing_portal.Session.create(
+            customer=customer, configuration=_portal_configuration_id(),
+            return_url=f"{body.origin_url.rstrip('/')}/billing",
+        )
     except stripe.error.StripeError as e:
         logger.exception("Stripe portal failed")
         raise HTTPException(status_code=502, detail=e.user_message or "Could not open the billing portal")
@@ -145,6 +161,16 @@ async def stripe_webhook(request: Request):
         status = "failed" if t.endswith("failed") else "expired"
         await db.payment_transactions.update_one({"session_id": obj["id"]},
                                                  {"$set": {"status": status, "payment_status": status, "updated_at": now()}})
+    elif t == "customer.subscription.updated" and obj.get("status") in ("active", "trialing"):
+        items = (obj.get("items") or {}).get("data") or []
+        lookup_key = items[0]["price"].get("lookup_key") if items else None
+        plan = next((p for p, k in PLAN_LOOKUP.items() if k == lookup_key), None)
+        if plan:
+            await db.users.update_one(
+                {"$or": [{"stripe_subscription_id": obj["id"]}, {"stripe_customer_id": obj.get("customer") or "_none_"}]},
+                {"$set": {"plan": plan, "subscription_status": "active_subscriber",
+                          "stripe_subscription_id": obj["id"], "plan_updated_at": now()}},
+            )
     elif t == "customer.subscription.deleted":
         match = [{"stripe_subscription_id": obj["id"]}]
         if obj.get("customer"):

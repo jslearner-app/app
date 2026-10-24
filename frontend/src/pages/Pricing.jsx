@@ -3,6 +3,7 @@ import { AlertTriangle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PricingMatrix } from "@/components/billing/PricingMatrix";
+import { resetDate } from "@/components/billing/UsageMeter";
 
 export default function Pricing() {
   const { user } = useAuth();
@@ -20,7 +21,7 @@ export default function Pricing() {
             <div className="font-semibold text-amber-200">{monthly ? `You've reached your ${user.page_limit.toLocaleString()}-page monthly limit` : "You've reached the 5-page free trial limit"}</div>
             <div className="text-sm text-amber-100/70">
               {monthly
-                ? `You have used ${user.usage_pages.toLocaleString()} of ${user.page_limit.toLocaleString()} pages this month. ${user.plan === "starter" ? "Upgrade to Agency for 1,000 pages per month, or wait" : "Your allowance resets"} on ${user.period_resets_at}.`
+                ? `You have used ${user.usage_pages.toLocaleString()} of ${user.page_limit.toLocaleString()} pages this month. ${user.plan === "starter" ? "Upgrade to Agency for 1,000 pages per month, or wait until" : "Your allowance resets on"} ${resetDate(user.period_resets_at)} (UTC).`
                 : `You have used ${user.usage_pages} of 5 free pages. Choose a plan to keep converting statements.`}
             </div>
           </div>

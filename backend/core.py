@@ -103,10 +103,11 @@ async def reserve_pages(u: dict, pages: int) -> bool:
 
 
 async def release_pages(u: dict, pages: int):
-    inc = {"pages_used": -pages}
+    await db.users.update_one({"user_id": u["user_id"]}, {"$inc": {"pages_used": -pages}})
     if u.get("plan") in PAID_PLANS:
-        inc["period_pages"] = -pages
-    await db.users.update_one({"user_id": u["user_id"]}, {"$inc": inc})
+        await db.users.update_one(
+            {"user_id": u["user_id"], "usage_period": current_period(), "period_pages": {"$gte": pages}},
+            {"$inc": {"period_pages": -pages}})
 
 
 def public_user(u: dict) -> dict:

@@ -103,7 +103,7 @@ export const CheckoutTrustBadges = () => (
   <div className="flex flex-col gap-3" data-testid="checkout-trust-badges">
     {CHECKOUT_BADGES.map((b) => (
       <div key={b.id} data-testid={`checkout-badge-${b.id}`} className="flex items-center gap-3 rounded-lg border border-slate-700/80 bg-slate-900/80 px-3 py-2.5">
-        <img src={b.logo} alt={`${b.title} logo`} width="20" height="20" loading="lazy" className="h-5 w-5" />
+        <img src={b.logo} alt={`${b.title} logo`} width="20" height="20" className="h-5 w-5" />
         <span className="text-xs font-medium text-slate-200">{b.title}</span>
       </div>
     ))}

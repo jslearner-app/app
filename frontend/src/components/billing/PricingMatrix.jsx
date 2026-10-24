@@ -43,17 +43,29 @@ export const PricingMatrix = ({ publicMode = false, currentPlan }) => {
     }
   };
 
+  const openPortal = async (plan) => {
+    setLoading(plan);
+    try {
+      const { data } = await api.post("/billing/portal", { origin_url: window.location.origin });
+      window.location.href = data.url;
+    } catch (e) {
+      toast.error(errMsg(e));
+      setLoading(null);
+    }
+  };
+
   const cta = (plan, label) => {
     const isCurrent = currentPlan === plan;
+    const viaPortal = !publicMode && !isCurrent && ["starter", "agency"].includes(currentPlan);
     return (
       <Button
-        onClick={() => checkout(plan)}
+        onClick={() => (viaPortal ? openPortal(plan) : checkout(plan))}
         disabled={isCurrent || loading !== null}
         data-testid={`checkout-${plan}-button`}
         className={`mt-8 w-full h-11 font-semibold ${plan === "starter" ? "bg-emerald-500 hover:bg-emerald-400 text-emerald-950" : "bg-slate-100 hover:bg-white text-slate-900"}`}
       >
         {loading === plan && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-        {isCurrent ? "Current plan" : publicMode ? "Start 5-page free trial" : label}
+        {isCurrent ? "Current plan" : publicMode ? "Start 5-page free trial" : viaPortal ? "Switch plan in billing portal" : label}
       </Button>
     );
   };

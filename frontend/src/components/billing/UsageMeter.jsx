@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-const resetDate = (iso) => (iso ? new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) : "");
+export const resetDate = (iso) => (iso ? new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) : "");
 
 export const UsageMeter = ({ user, compact = false }) => {
   const limit = user.page_limit;
@@ -24,7 +24,7 @@ export const UsageMeter = ({ user, compact = false }) => {
       <div className="mt-2 h-1.5 rounded-full bg-slate-800 overflow-hidden">
         <div className={`h-full rounded-full transition-all duration-500 ${exhausted ? "bg-amber-400" : "bg-emerald-500"}`} style={{ width: `${pct}%` }} />
       </div>
-      {monthly && !compact && (
+      {monthly && !compact && !(exhausted && !canUpgrade) && (
         <div className="mt-2 text-xs text-slate-500" data-testid="usage-reset-date">Resets {resetDate(user.period_resets_at)} (UTC)</div>
       )}
       {(exhausted || !compact) && (monthly ? canUpgrade || exhausted : true) && (

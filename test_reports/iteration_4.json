@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 4: tested the monthly page caps (Starter 200 and Agency 1,000 per calendar month in UTC; free trial 5 lifetime) and LawPay fees read from the CSV fee column. Backend: 14/14 pytest tests pass when run serially. That covers /auth/me usage fields, 402 for starter/agency/free at their limits, starter at 199 reserving pages then getting 424 from Textract with the pages refunded, a stale usage_period resetting to 0, LawPay fee_total 272.88 with a balanced trust ledger and QBO CSV, recalculate on a LawPay payout returning 400, a LawPay CSV without a fee column returning 400, negative and parenthesized fees summed as absolute values, the DoorDash 30% regression (commission 81.80, recalculation works) and the standalone /app/api TestClient returning lawpay fee_total 272.88. Frontend: every requested UI flow passed (usage meters for free, starter and agency; redirects for monthly_limit and trial_limit; Billing copy; no 'Unlimited' anywhere in src; LawPay splitter UI, QBO download and History row; DoorDash regression with the rate input back at 30).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "core.release_pages", "issue": "Refunds period_pages without checking usage_period. If the month rolls over between reserve and a failed Textract call, the new period's count goes negative (-pages). Edge case."},
+      {"endpoint": "core.reserve_pages (paid)", "issue": "Paid usage also increments lifetime pages_used. If a paid user later returns to the free plan (cancel or downgrade), the free check uses lifetime pages_used, so they are blocked right away. That may be intended, but please confirm."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Pricing trial-limit-banner (monthly)", "issues": ["Copy reads '...Upgrade to Agency for 1,000 pages per month, or wait on 2026-11-01.' It shows a raw ISO date and 'wait on' reads badly. Suggest 'or wait until Nov 1 (UTC)', reusing the UsageMeter resetDate formatter. For agency the sentence reads 'Your allowance resets on 2026-11-01', which is fine apart from the ISO date."]},
+      {"screen": "Billing usage-meter (agency, exhausted)", "issues": ["The reset date appears twice: 'Resets Nov 1 (UTC)' and 'Monthly limit reached. Resets Nov 1'."]},
+      {"screen": "Pricing / Billing trusted-checkout badges", "issues": ["The QuickBooks, Xero and Stripe logo icons sometimes render blank (an empty slot to the left of the text) on /pricing and on Billing for agency. Check that the logo images load reliably."]},
+      {"screen": "Billing / Pricing for an Agency user", "issues": ["'Subscribe to Starter' is still offered to an Agency subscriber. That is a downgrade through a new checkout and may create a second subscription. Consider routing it to the Customer Portal."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter4_caps_lawpay_fees.py", "/app/backend/tests/set_demo_state.py", "/app/test_reports/pytest/pytest_iter4.xml"],
+  "action_items": [
+    "Format period_resets_at in the Pricing monthly banner (e.g. 'until Nov 1 (UTC)') instead of the raw ISO date",
+    "Optional: in release_pages, only decrement period_pages when usage_period still matches the period that was reserved",
+    "Optional: remove the duplicate reset text in the exhausted agency usage meter; hide 'Subscribe to Starter' for Agency users"
+  ],
+  "critical_code_review_comments": [
+    "Run the iter4 tests with '-n 0'. pytest-xdist is enabled by default, and the tests share and mutate the demo user in Mongo, so parallel runs fail intermittently.",
+    "Cap enforcement is atomic (a conditional $inc filtered on usage_period and period_pages), so it is race-safe. The 402 detail is computed from the stale user dict. That only affects the message text."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter4_caps_lawpay_fees.py", "/app/backend/tests/set_demo_state.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "demo@ledgerstream.ai / LedgerDemo#2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None persisted. Demo user reset to plan free, subscription_status trial, pages_used 0, with usage_period and period_pages unset. The 2 payouts created in the UI were deleted, and pytest cleans up its own payouts.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The server date is 2026-10, so the reset date is Nov 1. Use 'python /app/backend/tests/set_demo_state.py <free|starter|agency> <pages>' (or 'reset') to set the demo user's state. Textract is always denied by an AWS SCP (424), so caps are verified as 402 vs 424. Run pytest with -n 0.",
+  "rca of the issue": "N/A. No functional bugs found."
+}
