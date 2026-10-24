@@ -1493,8 +1493,14 @@ async def seed_demo_user():
         await db.users.update_one({"email": email}, {"$set": {"password_hash": hash_password(password)}})
 
 
-@app.on_event("startup")
-async def startup():
+_initialized = False
+
+
+async def ensure_initialized():
+    """Runs index creation and demo seeding once per process / warm Lambda container."""
+    global _initialized
+    if _initialized:
+        return
     await db.users.create_index("email", unique=True)
     await db.users.create_index("user_id", unique=True)
     await db.user_sessions.create_index("session_token")
@@ -1507,11 +1513,13 @@ async def startup():
     await db.contact_messages.create_index([("user_id", 1), ("created_at", -1)])
     if os.environ.get("DEMO_EMAIL") and os.environ.get("DEMO_PASSWORD"):
         await seed_demo_user()
+    _initialized = True
 
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+@app.middleware("http")
+async def init_once(request: Request, call_next):
+    await ensure_initialized()
+    return await call_next(request)
 
 
 app.add_middleware(
@@ -1525,4 +1533,4 @@ app.add_middleware(
 )
 
 # AWS Lambda entry point (configure handler as "lambda_function.lambda_handler").
-lambda_handler = Mangum(app, lifespan="auto")
+lambda_handler = Mangum(app, lifespan="off")

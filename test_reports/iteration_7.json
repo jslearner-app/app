@@ -1,0 +1,39 @@
+{
+  "summary": "Ran the regression suite after the Lambda refactor: pytest /app/backend_tests passed 21/21, with no test-side changes needed. Separately, I simulated Lambda invocations locally with an API Gateway v2 event. This found a CRITICAL production bug: lambda_handler = Mangum(app, lifespan='auto') runs the FastAPI startup AND shutdown hooks on every invocation. The shutdown hook calls client.close(), so the next warm invocation fails with pymongo InvalidOperation 'Cannot use MongoClient after close' (LifespanFailure). In practice only the first request per Lambda container works. The preview (uvicorn) is not affected. Playwright frontend checks passed: UI login with the demo account; dashboard metrics; the API base resolves to NEXT_PUBLIC_API_URL (all /api calls went to the preview host); splitter (Burger Shack + Toast, sample CSV download, upload at 20% gives a balanced ledger of $8,522.45 on both sides, QBO CSV download with the correct header); history shows the new payout; clients add dialog works; billing and pricing render; the /contact form renders (not submitted, so no email was sent). LowPageAlert appears at pages_used=4 ('80% of your free trial pages', Upgrade now -> /pricing) on dashboard, clients, history, billing and pricing; it hides when dismissed and is absent at 0. At 390px there is no horizontal overflow on 5 pages and the mobile menu works. A Textract upload of a 1-page PDF returned 424, because AWS denies textract:AnalyzeDocument through an Organizations service control policy; pages_used was refunded to 0.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "ALL (AWS Lambda deployment via lambda_function.lambda_handler)", "issue": "Mangum(app, lifespan='auto') runs startup and shutdown on every invocation. The shutdown hook calls client.close(), so invocation #2 in a warm container fails: LifespanFailure / pymongo InvalidOperation 'Cannot use MongoClient after close'. Reproduced with /app/backend_tests/mangum_sim.py: call 1 returns 200; call 2 raises. Startup also runs about 10 create_index calls plus seed_demo_user (a bcrypt verify) on every request, about 230ms extra latency. Fix: use Mangum(app, lifespan='off') and run the index/seed setup once, lazily, guarded by a module-level flag; or remove client.close() from shutdown and make startup idempotent and run once.", "priority": "CRITICAL"},
+      {"endpoint": "POST /api/statements (AWS Textract)", "issue": "This is not a code bug. The configured AWS IAM user LedgerStream_Engine is blocked by an Organizations service control policy with an explicit deny on textract:AnalyzeDocument, so every bank statement conversion fails with 424. The app handles it correctly: pages are refunded and a 'not charged' message is shown. The AWS account/SCP must be fixed before the converter can work.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard (390px)", "issues": ["The module tab cards (Bank Statement Converter / Merchant Payout Splitter) are centered at their content width instead of full width, so the two cards have different widths. Add w-full to the TabsTrigger, or justify-stretch to the list."]},
+      {"screen": "Splitter results", "issues": ["'Net per file' ($5,919.87) differs from the Bank Clearing debit ($6,817.96) with no explanation or warning. Consider a variance note so users understand the commission-rate vs file-fees difference."]}
+    ]
+  },
+  "test_report_links": ["/app/backend_tests/test_ledgerstream_regression.py", "/app/backend_tests/mangum_sim.py", "/app/test_reports/pytest/pytest_iter7.xml"],
+  "action_items": [
+    "CRITICAL: Fix the Mangum lifespan / Mongo client lifecycle in /app/api/lambda_function.py (lifespan='off' + one-time lazy init, or don't close the client on shutdown). Re-verify with: cd /app && python backend_tests/mangum_sim.py (expect 3x 200 and 'me 401').",
+    "Tell the user that AWS Textract is denied by an Organizations SCP for IAM user LedgerStream_Engine; they need to fix it in AWS.",
+    "(Minor) Make the mobile module tab cards full width."
+  ],
+  "critical_code_review_comments": [
+    "Cookies use SameSite=None; Secure. In the planned deployment the frontend is on Vercel and the API is on a Lambda/API Gateway domain, which makes these third-party cookies. Safari ITP and Chrome third-party cookie restrictions may block them and break auth. Recommend serving the API under the same site (a custom subdomain such as api.<yourdomain>, or a Vercel rewrite of /api to Lambda).",
+    "CORS_ORIGINS must include the Vercel production and preview origins, otherwise every credentialed call fails.",
+    "vercel.json in /app/api uses @vercel/python. If the backend is deployed only to Lambda, remove it or document it to avoid confusion.",
+    "lambda_function.py is 1528 lines in a single file. That was requested, but note it for maintainability.",
+    "@app.on_event is deprecated in FastAPI; prefer a lifespan context."
+  ],
+  "updated_files": ["/app/backend_tests/mangum_sim.py (new, Lambda invocation simulator)"],
+  "success_rate": {"backend": "100% (21/21 pytest via uvicorn); Lambda handler fails on warm invocations", "frontend": "100%"},
+  "test_credentials": "demo@ledgerstream.ai / LedgerDemo#2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created and cleaned up TEST_PayoutClient, TEST_Client and TEST_UI Client, the test users, one Toast payout on The Burger Shack and a checkout transaction. Demo user reset to plan free / pages_used 0 / trial. contact_messages, statements and the test_ users are all empty.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest /app/backend_tests -v (21 tests, ~13s). Run python /app/backend_tests/mangum_sim.py to verify the Lambda handler across warm invocations. Never make a valid unstubbed POST /api/contact (it sends real email). Textract returns 424 because of the AWS SCP deny. Log in through page.request.post('/api/auth/login'). Testids: module-tab-splitter, splitter-client-select, platform-option-<id>, payout-upload-dropzone-input, calculate-ledger-button, download-qbo-csv-button, low-page-alert(-dismiss).",
+  "rca of the issue": "Mangum's handler wraps each event in a LifespanCycle when lifespan is 'auto' or 'on'. That sends lifespan.startup before the request and lifespan.shutdown after it. The app's shutdown handler closes the module-level AsyncIOMotorClient. AWS reuses the Python module (and the closed client) for the next warm invocation, and startup's create_index then raises InvalidOperation. Reproduce: python /app/backend_tests/mangum_sim.py. Mitigation: lifespan='off' plus an idempotent one-time init (e.g. an asyncio.Lock and an _initialized flag called from a dependency or middleware), and never close the client in the Lambda path."
+}

@@ -14,7 +14,9 @@ Follow-up request: stop using simulated placeholders; real boto3 Textract analyz
 JWT email/password + Google sign-in; Textract keys added later; Stripe claimable sandbox; payout CSV auto-detect gross/net; trial = 5 PDF pages per user account.
 
 ## Architecture
-- Backend FastAPI: core.py (db, JWT + Emergent session auth), auth_routes.py, workspace_routes.py (clients, statements, Textract HMAC webhook, payouts, history, dashboard), billing_routes.py (Stripe checkout/status/portal/webhooks), textract_pipeline.py (boto3 analyze_document TABLES per page -> Blocks -> pandas), ledger_engine.py (Decimal ROUND_HALF_UP ledger, QBO CSV), setup_stripe.py (catalog starter_monthly/agency_monthly).
+- Backend (since 2026-10-24): ONE file /app/api/lambda_function.py (FastAPI app + Mangum `lambda_handler`, lifespan off, one-time init middleware): auth, clients, Textract pipeline, reconciliation, payout splitter (incl. LawPay exact fees), page caps + 80% low_page_alert, Stripe billing/webhooks, contact + emails. DB only via DATABASE_URL (+ DB_NAME or db in URL). /app/api also has requirements.txt, vercel.json (@vercel/python builds), .env.example, setup_stripe.py (one-time Stripe catalog).
+- /app/backend is only an Emergent preview shim: server.py maps MONGO_URL -> DATABASE_URL and imports lambda_function.app (uvicorn --reload watches /app/backend only: restart backend after editing api/).
+- Frontend /app/frontend = Vercel root (vercel.json, SPA rewrites). API base = process.env.NEXT_PUBLIC_API_URL (craco DefinePlugin; preview falls back to REACT_APP_BACKEND_URL).
 - Data scoped by owner_id (user_id). Raw files processed in memory, never stored.
 - Frontend React + shadcn, Plus Jakarta Sans / IBM Plex Sans / JetBrains Mono.
 
@@ -37,10 +39,12 @@ CPA firm founders cleaning restaurant backlogs; solo virtual e-commerce bookkeep
 - 2026-10-24: Low Page Alert banner (>=80% usage, charcoal/yellow, free->pricing, Starter->Stripe portal, Agency->sales mailto, session dismiss). App footer + commented third-party header/footer widget blocks (index.html, AppShell) with .support-widget-root safe area. Public /contact page (support@ / sales@ledgerstreamai.com)
 - 2026-10-24: Contact form (dashboard bottom + /contact when signed in): name, account email (read-only), role, desk, message -> POST /api/contact (auth, server-side recipient, 5/hour rate limit, stored in contact_messages) -> Emergent managed Resend to support@/sales@ledgerstreamai.com
 - 2026-10-24: Contact confirmation email to the sender's account email ("We got your message", desk-specific response time, reference id); failure is logged and doesn't block the desk email
-- Tested: iteration_1..6 (backend 23/23; frontend flows incl. real Stripe test checkout)
+- 2026-10-24: Production refactor for Vercel + AWS Lambda (single lambda_function.py, DATABASE_URL, NEXT_PUBLIC_API_URL, legacy backend modules/tests and old api/index.py + ledgerstream_core removed). Fixed Mangum warm-invocation bug (client closed after each call).
+- Tested: iteration_1..7 (iteration_7: backend 21/21 via /app/backend_tests, frontend flows, Lambda warm invocations re-verified)
 
 ## Backlog
 - P0: Add AWS keys and verify live Textract parsing on real statements
+- P1: Dashboard tab cards full width at 390px; splitter note explaining file net vs rate-based net difference
 - P1: Async Textract (StartDocumentAnalysis + S3 + SNS -> /api/webhooks/textract) for very large PDFs; History delete confirmation
 - P2: Team seats for Agency, client-level reporting
 
