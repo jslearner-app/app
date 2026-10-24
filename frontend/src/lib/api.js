@@ -1,6 +1,6 @@
 import axios from "axios";
 
-export const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+export const API = `${process.env.NEXT_PUBLIC_API_URL}/api`;
 export const api = axios.create({ baseURL: API, withCredentials: true });
 
 const NO_RETRY = ["/auth/refresh", "/auth/login", "/auth/register", "/auth/google/session"];

@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { api, errMsg } from "@/lib/api";
 import { resetDate } from "@/components/billing/UsageMeter";
 
-const THRESHOLD = 0.8;
 const DISMISS_KEY = "ls-low-page-alert-dismissed";
 
 const UpgradeAction = ({ user }) => {
@@ -38,7 +37,7 @@ const UpgradeAction = ({ user }) => {
 export const LowPageAlert = ({ user }) => {
   const level = `${user.plan}:${user.usage_pages >= user.page_limit ? "full" : "low"}`;
   const [dismissed, setDismissed] = useState(() => sessionStorage.getItem(DISMISS_KEY) === level);
-  if (!user.page_limit || user.usage_pages < user.page_limit * THRESHOLD || dismissed) return null;
+  if (!user.low_page_alert || dismissed) return null;
 
   const full = user.usage_pages >= user.page_limit;
   const monthly = user.limit_period === "month";

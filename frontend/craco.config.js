@@ -109,6 +109,11 @@ let webpackConfig = {
       '@': path.resolve(__dirname, 'src'),
     },
     configure: (webpackConfig) => {
+      // Expose NEXT_PUBLIC_API_URL to the browser bundle (Emergent preview maps it from REACT_APP_BACKEND_URL).
+      const definePlugin = webpackConfig.plugins.find((p) => p.constructor.name === "DefinePlugin");
+      definePlugin.definitions["process.env"].NEXT_PUBLIC_API_URL = JSON.stringify(
+        process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL
+      );
 
       // Add ignored patterns to reduce watched directories
         webpackConfig.watchOptions = {
