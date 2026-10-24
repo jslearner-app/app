@@ -1,0 +1,25 @@
+{
+  "summary": "Frontend-only test of the Low Page Alert, app footer, /contact page and index.html commented widget blocks. All 8 requested scenarios pass. Free 3/5: no alert. Free 4/5: alert on /dashboard, /clients, /history and /billing, titled 'You've used 80% of your free trial pages', with 'Upgrade now' linking to /pricing. Free 5/5: 'You've used all of your free trial pages', and it shows again even when the 'free:low' level was dismissed. Starter 165: '83% of this month's pages', 'resets Nov 1 (UTC)', and 'Upgrade to Agency' calls POST /api/billing/portal, which returns 400 ('No active subscription to manage yet'). The error toast shows, nothing crashes and the button is enabled again. Starter 150: no alert. Agency 850: 85%, 'Contact sales' links to mailto:sales@ledgerstreamai.com. Dismissing hides the alert across navigation and reload within the session. Styling is correct: bg rgb(30,41,59), yellow border rgba(250,204,21,0.5), yellow-200 title. At 390px the alert stacks with no horizontal overflow (scrollWidth 390). The app footer shows the contact link and support email and sits below the content with no overlap. /contact works logged out (back link to /, 'Back to home') and logged in (back link to /dashboard). H1, the 'Direct Channels' heading, both cards' text and the mailto links match the spec. The landing footer link navigates to /contact. index.html has the commented header script and #support-widget-root blocks; the element is not in the DOM and there are no page errors (the only console errors are expected 401s from /auth/me when logged out).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "LowPageAlert + sonner toast", "issue": "The error toast for Starter 'Upgrade to Agency' (top-right) briefly covers the alert's dismiss X on desktop 1920 until it auto-hides. This is transient and cosmetic.", "selector": "[data-testid='low-page-alert-dismiss']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "History (390px)", "issues": ["The empty-state text 'No conversions yet.' is centered across the wide horizontally-scrollable table, so it appears cut off or off-center on mobile. This was there before and is minor."]}
+    ]
+  },
+  "test_report_links": ["/app/tests/set_demo.sh"],
+  "action_items": ["Optional: move the sonner toaster position or add top offset so it doesn't cover the alert dismiss button", "Optional: center the History empty state within the viewport on mobile"],
+  "critical_code_review_comments": [
+    "LowPageAlert: the 'dismissed' state comes from useState and is initialised once. Usage can rise from low to full during a session without a remount (the user stays on /dashboard and refreshUser updates the user). The alert stays hidden because level changes but dismissed stays true. In tests it reappeared only because the page reloaded. Fix: compute dismissed from sessionStorage === level on each render, or reset it when level changes (useEffect on level).",
+    "The Starter portal 400 for users without a stripe_customer_id is handled gracefully via the toast."
+  ],
+  "updated_files": ["/app/tests/set_demo.sh (new helper for setting demo user plan/usage)"],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "seed_data_creation": "Changed the demo user's plan/usage temporarily. It is now reset to plan free, subscription_status trial, pages_used 0, with usage_period, period_pages and stripe_customer_id unset.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use /app/tests/set_demo.sh {free N | starter N | agency N | reset} to set the demo user's state, then log in fresh (new browser context = clean sessionStorage). The server date was Oct 2026, so the reset date reads 'Nov 1'."
+}

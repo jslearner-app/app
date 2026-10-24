@@ -129,7 +129,7 @@ export default function History() {
               </tr>
             ))}
             {items && !items.length && (
-              <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-500" data-testid="history-empty-state">{kind === "needs_review" ? "No statements need review. Everything reconciles." : "No conversions yet. Head to the Dashboard to process your first file."}</td></tr>
+              <tr><td colSpan={7} className="px-4 py-12 text-slate-500" data-testid="history-empty-state"><div className="sticky left-4 max-w-[calc(100vw-5rem)] sm:max-w-none sm:text-center">{kind === "needs_review" ? "No statements need review. Everything reconciles." : "No conversions yet. Head to the Dashboard to process your first file."}</div></td></tr>
             )}
           </tbody>
         </table>
