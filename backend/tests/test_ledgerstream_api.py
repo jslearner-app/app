@@ -153,16 +153,17 @@ def _sign(body: bytes):
 
 
 class TestStatements:
-    def test_engine_not_configured(self, user_a):
+    # iteration 3: real AWS keys are configured now
+    def test_engine_configured(self, user_a):
         s, _ = user_a
         r = s.get(f"{API}/statements/engine")
-        assert r.status_code == 200 and r.json()["configured"] is False
+        assert r.status_code == 200 and r.json()["configured"] is True
 
-    def test_convert_503_no_charge(self, user_a, client_a):
+    def test_convert_unreadable_pdf_400_no_charge(self, user_a, client_a):
         s, u = user_a
         r = s.post(f"{API}/statements", files={"file": ("x.pdf", b"%PDF-1.4 fake", "application/pdf")},
                    data={"client_id": client_a["id"]})
-        assert r.status_code == 503 and "Textract" in r.json()["detail"]
+        assert r.status_code == 400 and "readable PDF" in r.json()["detail"]
         assert s.get(f"{API}/auth/me").json()["pages_used"] == 0
 
     def test_webhook_invalid_sig(self):

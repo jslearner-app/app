@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { api, errMsg } from "@/lib/api";
 import { CheckoutTrustBadges } from "@/components/trust/TrustSignals";
 
-const STARTER = ["Up to 200 parsed pages per month", "Merchant Payout Splitter for all 5 platforms", "Excel, CSV & QuickBooks journal exports", "Client profiles & conversion history"];
+const STARTER = ["Up to 200 parsed pages per month", "Merchant Payout Splitter for all 6 platforms", "Excel, CSV & QuickBooks journal exports", "Client profiles & conversion history"];
 const AGENCY = ["Everything in Starter", "Up to 1,000 parsed pages per month", "Built for multi-client bookkeeping firms", "Priority parsing queue", "Priority support"];
 
 const Features = ({ items }) => (

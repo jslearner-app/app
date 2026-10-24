@@ -136,7 +136,7 @@ async def convert_statement(
         await db.users.update_one({"user_id": user["user_id"]}, {"$inc": {"pages_used": -pages}})
         logger.exception("Textract pipeline failed")
         reason = str(e) if isinstance(e, (tp.TextractError, tp.TextractNotConfigured)) else "Statement parsing failed"
-        raise HTTPException(status_code=502, detail=f"{reason}. Your pages were not charged.")
+        raise HTTPException(status_code=424, detail=f"{reason}. Your pages were not charged.")
     doc = {
         "id": new_id("stm"), "kind": "statement", "owner_id": user["user_id"],
         "client_id": client["id"], "client_name": client["name"], "filename": file.filename,

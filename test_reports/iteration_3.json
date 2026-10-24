@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 3 covered the LawPay trust splitter (API and UI), the DoorDash regression, the LawPay client toggle, pricing copy on /pricing, /billing and the landing page, backend regression after the ledgerstream_core refactor, Textract AccessDenied with page refund, CORS preflight, and the standalone /app/api app run in-process with TestClient. Everything works except one integration bug: the preview ingress replaces the body of any 502 response with an HTML error page. When Textract is denied, the backend correctly raises 502 'Textract rejected page 1: AccessDeniedException - ...' (confirmed in the backend log) and refunds the pages (pages_used stays 0). But the client receives HTML, so the UI toast shows the generic 'Something went wrong. Please try again.' instead of the AccessDenied message. 16/17 new backend tests pass, and 23/23 tests pass in the updated test_ledgerstream_api.py.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/statements (Textract failure path)", "issue": "Returns 502 with JSON {detail: 'Textract rejected page 1: AccessDeniedException - User ... explicit deny in a service control policy ... Your pages were not charged.'}. Through the public URL the ingress (Cloudflare/Google front end) replaces 502 bodies with an HTML 'Bad Gateway' page, so the detail never reaches the browser. 503 JSON passed through in earlier iterations; 502 does not. Fix: use a non-gateway status for upstream Textract errors, e.g. 422 or 424 (or 503 if you want to keep a 5xx). Make the same change in /app/api/index.py convert_statement.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/auth/me (page_limit)", "issue": "Paid plans still get page_limit=None (unlimited), and no 200-page or 1,000-page monthly cap is enforced anywhere. The new pricing copy promises caps the backend doesn't implement."},
+      {"endpoint": "payouts.build_ledger (lawpay)", "issue": "The LawPay fee is estimated from the rate (3% of 9250 = 277.50). The CSV's own 'Fee' column (147.50+73.75+51.63 = 272.88) is ignored. This is acceptable as a design choice, but bookkeepers may expect the actual fees from the file."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Converter upload when Textract fails", "issue": "The toast shows 'Something went wrong. Please try again.' because the 502 HTML body has no detail. Also, Promise.all([api.post, delay(3800)]) rejects as soon as the POST fails, so the loader only flashes for the length of the request instead of the intended minimum duration before the error toast.", "affected_selectors": ["[data-testid=pdf-upload-dropzone-input]", "[data-testid=statement-parsing-loader]", "[data-sonner-toast]"]}
+    ],
+    "design_issues": [
+      {"screen": "Pricing / Billing / Landing Starter card", "issues": ["Starter still says 'Merchant Payout Splitter for all 5 platforms'. There are now 6 (LawPay)."]},
+      {"screen": "Billing / PaymentSuccess / UsageMeter", "issues": ["The copy still promises unlimited usage, which contradicts the new 200/1,000 page caps: Billing.jsx 'Upgrade for unlimited conversions.', PaymentResult.jsx 'Unlimited statement conversions...', and UsageMeter 'Unlimited on your {plan} plan'."]},
+      {"screen": "Splitter empty state (LawPay)", "issues": ["The chip reads 'Dr Processing Fees', but the ledger account is 'Credit Card Processing Fees'. Trivial."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter3_lawpay_refactor.py", "/app/backend/tests/test_ledgerstream_api.py", "/app/test_reports/pytest/pytest_results_iter3.xml"],
+  "action_items": [
+    "Change the Textract failure status from 502 to a non-gateway code (e.g. 422/424) in backend workspace_routes.convert_statement and in api/index.py, so the 'Textract rejected page 1: AccessDeniedException ...' detail reaches the UI toast. Then update test_iter3_lawpay_refactor.py::test_textract_access_denied_refund to match.",
+    "Optional: keep the ParsingLoader visible for its minimum duration even when the request fails (await the delay in the catch, or use Promise.allSettled).",
+    "Update the Starter copy from 'all 5 platforms' to 6, and remove the 'unlimited' wording in Billing.jsx, PaymentResult.jsx and UsageMeter.jsx.",
+    "Decide whether to enforce the 200/1,000 monthly page caps in the backend (currently page_limit=None for paid plans)."
+  ],
+  "critical_code_review_comments": [
+    "api/.env.example lists DATABASE_URL and DB_NAME, but the standalone index.py never imports ledgerstream_core.db, so the DB config is unused there. Either drop the entries or document them as used only by /app/backend.",
+    "Standalone CORS uses allow_methods GET, POST, OPTIONS and allow_credentials False with an X-API-Key header. That is fine for server-to-server use, but a browser on CORS_ORIGINS would expose the API key. Don't call this app directly from the browser.",
+    "workspace_routes._read_upload doesn't check the .csv extension for payouts, while the standalone _read does. This inconsistency is minor.",
+    "/app/backend/tests/sample_statement.pdf did not exist. A one-page reportlab PDF was generated for this run.",
+    "test_review_count.py depends on deleted seed data from iteration 2 (it expects stm_TESTbad1/2) and on the REACT_APP_BACKEND_URL env var, so 3 of its tests now fail for stale-data reasons, not app bugs. The new test file covers review-count."
+  ],
+  "updated_files": ["/app/backend/tests/test_ledgerstream_api.py (engine configured=true; a fake PDF now gets 400 with no charge)", "/app/backend/tests/test_iter3_lawpay_refactor.py (new)", "/app/backend/tests/sample_statement.pdf (new)"],
+  "success_rate": {"backend": "94% (16/17 new tests; the only failure is the 502 body rewritten by the ingress. Old suite 23/23)", "frontend": "92% (LawPay splitter, DoorDash regression, client toggle and pricing all pass; the converter error toast is generic)"},
+  "test_credentials": "demo@ledgerstream.ai / LedgerDemo#2026",
+  "seed_data_creation": "All cleaned up: TEST_ clients, 4 payouts, the seeded stm_TEST statement, pending Stripe payment_transactions for the demo user and the leftover test_rc_ user were deleted. Demo pages_used was reset to 0.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "2 real AWS Textract calls were made, both AccessDenied (SCP explicit deny), and pages were refunded correctly. To check the UI error toast without calling AWS, use page.route on **/api/statements POST. pytest.ini forces xdist; use -n 0 for serial runs. Demo client order is alphabetical, with Downtown Boutique first in the selects. Splitter testids: platform-option-*, commission-rate-input, rate-preset-*, payout-upload-dropzone-input, calculate-ledger-button, ledger-line-N(-debit/-credit), ledger-total-debits/credits, ledger-balanced-badge, download-qbo-csv-button, split-another-button."
+}

@@ -46,7 +46,8 @@ export const ConverterPanel = ({ clients, onConverted }) => {
     form.append("file", file);
     form.append("client_id", clientId);
     try {
-      const [res] = await Promise.all([api.post("/statements", form), delay(3800)]);
+      const [res] = await Promise.all([api.post("/statements", form).catch((err) => ({ err })), delay(3800)]);
+      if (res.err) throw res.err;
       setStatement(res.data);
       toast.success(`${res.data.summary.transactions} transactions extracted from ${res.data.pages} page(s)`);
       onConverted?.();

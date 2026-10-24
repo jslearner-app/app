@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="17" time="5.419" timestamp="2026-10-24T18:07:42.719109+00:00" hostname="agent-env-c0896bac-87bf-4b5f-b7e8-6e9f68fd68b3"><testcase classname="tests.test_iter3_lawpay_refactor.TestAuth" name="test_login_me" time="0.638" /><testcase classname="tests.test_iter3_lawpay_refactor.TestClients" name="test_lawpay_saved_and_bogus_filtered" time="0.236" /><testcase classname="tests.test_iter3_lawpay_refactor.TestPayouts" name="test_lawpay_trust_ledger" time="0.396" /><testcase classname="tests.test_iter3_lawpay_refactor.TestPayouts" name="test_doordash_regression" time="0.158" /><testcase classname="tests.test_iter3_lawpay_refactor.TestStatements" name="test_put_rows_recompute_export_history" time="1.036" /><testcase classname="tests.test_iter3_lawpay_refactor.TestStatements" name="test_engine_configured" time="0.076" /><testcase classname="tests.test_iter3_lawpay_refactor.TestStatements" name="test_textract_access_denied_refund" time="0.384"><failure message="requests.exceptions.JSONDecodeError: Expecting value: line 1 column 1 (char 0)">/root/.venv/lib/python3.11/site-packages/requests/models.py:1116: in json
+    return complexjson.loads(self.text, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/json/decoder.py:337: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/json/decoder.py:355: in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+backend/tests/test_iter3_lawpay_refactor.py:157: in test_textract_access_denied_refund
+    assert "Textract rejected page 1: AccessDeniedException" in r.json()["detail"]
+                                                                ^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/models.py:1120: in json
+    raise RequestsJSONDecodeError(e.msg, e.doc, e.pos)
+E   requests.exceptions.JSONDecodeError: Expecting value: line 1 column 1 (char 0)</failure></testcase><testcase classname="tests.test_iter3_lawpay_refactor.TestBilling" name="test_summary" time="0.072" /><testcase classname="tests.test_iter3_lawpay_refactor.TestBilling" name="test_checkout" time="1.205" /><testcase classname="tests.test_iter3_lawpay_refactor.TestBilling" name="test_stripe_webhook_bad_sig" time="0.144" /><testcase classname="tests.test_iter3_lawpay_refactor.TestCors" name="test_preflight" time="0.145" /><testcase classname="tests.test_iter3_lawpay_refactor.TestStandalone" name="test_health" time="0.596" /><testcase classname="tests.test_iter3_lawpay_refactor.TestStandalone" name="test_no_key_401" time="0.005" /><testcase classname="tests.test_iter3_lawpay_refactor.TestStandalone" name="test_doordash_and_lawpay_qbo" time="0.015" /><testcase classname="tests.test_iter3_lawpay_refactor.TestStandalone" name="test_reconcile_mismatch" time="0.002" /><testcase classname="tests.test_iter3_lawpay_refactor.TestStandalone" name="test_convert_non_pdf_400" time="0.002" /><testcase classname="tests.test_iter3_lawpay_refactor.TestStandalone" name="test_convert_pdf_ext_but_garbage_400" time="0.005" /></testsuite></testsuites>

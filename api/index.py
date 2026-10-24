@@ -60,7 +60,7 @@ async def convert_statement(file: UploadFile = File(...)):
     except statements.TextractNotConfigured as e:
         raise HTTPException(status_code=503, detail=str(e))
     except statements.TextractError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=424, detail=str(e))
     return {"filename": file.filename, "pages": pages, "rows": rows, "summary": reconciliation.summarize(rows)}
 
 
