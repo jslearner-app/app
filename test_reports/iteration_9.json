@@ -1,0 +1,36 @@
+{
+  "summary": "Tested the Textract end-to-end diagnostic and Variance in History, backend and frontend. Backend: 46/46 pytest pass (/app/backend_tests). POST /api/statements/engine/check against real AWS returns scp_blocked with 3 steps (config ok, credentials ok, textract false). pages_used stays the same, the result is saved to textract_checks without user_id or _id in the response, a second call within 30s returns 429 'Please wait 30 seconds...', an unauthenticated call returns 401, and GET /api/statements/engine last_check is per user (a freshly registered user sees null). Unit tests import lambda_function with Textract and STS faked: realistic TABLE/CELL/WORD blocks for DIAG_HEADER+DIAG_ROWS give status 'ready' with all 4 steps ok ('3 of 3 transactions extracted, reconciliation: reconciled'). Dropping a row gives parse_mismatch, and not_configured stops after 1 step. _textract_failure classifies scp_blocked, iam_denied (AccessDenied without SCP text), invalid_keys (UnrecognizedClient/InvalidSignature), not_subscribed and textract_error. Startup backfill: inserted 3 TEST payouts without net_variance and restarted the backend; afterwards they were flagged (-4.50), matched (0.0), and null (no file net), as expected. GET /api/history?kind=variance returns only flagged payouts; review-count returns {needs_review, variance}; a recalculate that clears the flag removes the payout from the variance list. Frontend: the dashboard textract-check-card shows the last check with data-status=scp_blocked, 3 steps (no pipeline step) and the checked time. Re-running updates the time, and a second click shows the toast 'Please wait 30 seconds between connection checks'. History: the Toast badge reads 'Variance -$45.84' (amber, data-flagged=true, with a title tooltip); the LawPay badge reads 'Matches file' (green). The statement badge 'Needs review' and the needs-review counts in the sidebar and tab still work. The Variance filter shows only the flagged row and the history-variance-count badge reads 1. Deleting that row shows the empty-state copy and removes the count. At 390px there is no page overflow (scrollWidth 390) and the empty state fits within the viewport.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/statements/engine/check", "issue": "Credentials step detail reads 'Signed in as user/LedgerStream_Engine' (arn.split(':')[-1] keeps the 'user/' prefix). Cosmetic."},
+      {"endpoint": "ensure_initialized backfill", "issue": "The backfill calls net_variance(p.get('file_net_total'), p['ledger']) without a guard. A payout doc that has file_net_total but no ledger or empty ledger.lines would raise KeyError/IndexError inside init middleware on every request, taking the whole API down. Wrap it in try/except or skip malformed docs."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard TextractCheck", "issues": ["Re-running a check that is still failing gives no toast or other feedback beyond the timestamp changing. A success toast appears only when the status is 'ready'. Optional: show a toast like 'Check complete: still blocked'."]},
+      {"screen": "History 390px", "issues": ["The filter pill bar scrolls horizontally and the 'Variance' tab starts off-screen, so it is hard to discover. Not an overflow bug."]}
+    ]
+  },
+  "test_report_links": ["/app/backend_tests/test_textract_check_history_variance.py", "/app/backend_tests/test_textract_diagnostic_unit.py", "/app/backend_tests/test_payout_variance.py", "/app/backend_tests/test_ledgerstream_regression.py", "/app/test_reports/pytest/pytest_results_iter9.xml"],
+  "action_items": [
+    "(Recommended) Guard the startup backfill loop in ensure_initialized against malformed payout docs so a single bad doc can't break every request.",
+    "(Optional) Strip the 'user/' prefix from the STS ARN in the credentials step detail.",
+    "(Optional) Give feedback after re-running a check that is not ready.",
+    "User/AWS action still required: remove the SCP deny on textract:AnalyzeDocument."
+  ],
+  "critical_code_review_comments": [
+    "ensure_initialized backfill has no error handling and runs in the per-request init middleware; an exception there means _initialized never becomes True, so every request retries it and fails.",
+    "The sidebar nav-history-review-count shows only needs_review, not variance. This looks intentional, but flagged payouts aren't surfaced in the sidebar.",
+    "lambda_function.py is 1657 lines; consider splitting it into modules."
+  ],
+  "updated_files": ["/app/backend_tests/test_textract_check_history_variance.py", "/app/backend_tests/test_textract_diagnostic_unit.py"],
+  "success_rate": {"backend": "100% (46/46)", "frontend": "100%"},
+  "seed_data_creation": "Created temporarily and then cleaned up: TEST_UIVar client with toast/lawpay payouts, TEST_stmt_mm statement, TEST_bf_* payouts, and a test_iso_* user with its checks. Demo reset to pages_used=0, plan free. Demo textract_checks still holds 2 real scp_blocked check records.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest /app/backend_tests -v (46 tests). test_textract_check_history_variance clears demo textract_checks first to avoid the 30s cooldown. The unit test fakes lf.textract_client, lf.textract_enabled and lf.boto3.client('sts'). The dashboard card testids are textract-check-card/status/step-*/time/button. The History badges are history-variance-badge-{id} (data-flagged) and history-rec-badge-{id}; the filter is history-filter-variance with the count history-variance-count."
+}

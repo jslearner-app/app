@@ -37,6 +37,7 @@ export const TextractCheck = ({ initial }) => {
       const { data } = await api.post("/statements/engine/check");
       setCheck(data);
       if (data.status === "ready") toast.success("Textract works end to end. Upload a real statement to convert it.");
+      else toast.error(`Check complete: ${(STATUS_COPY[data.status] || STATUS_COPY.textract_error).label}`);
     } catch (e) {
       toast.error(errMsg(e));
     } finally {

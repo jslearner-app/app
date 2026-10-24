@@ -456,7 +456,7 @@ def run_textract_diagnostic() -> dict:
     cfg = textract_config()
     try:
         arn = boto3.client("sts", **cfg).get_caller_identity()["Arn"]
-        step("credentials", "AWS credentials valid", True, f"Signed in as {arn.split(':')[-1]}")
+        step("credentials", "AWS credentials valid", True, f"Signed in as {arn.split(':')[-1].split('/')[-1]}")
     except (ClientError, BotoCoreError):
         step("credentials", "AWS credentials valid", False, "AWS rejected these keys. Check the access key ID and secret.")
         return {"status": "invalid_keys", "steps": steps}
@@ -1630,7 +1630,8 @@ async def ensure_initialized():
     await db.payment_transactions.create_index("session_id", unique=True)
     await db.contact_messages.create_index([("user_id", 1), ("created_at", -1)])
     await db.textract_checks.create_index([("user_id", 1), ("checked_at", -1)])
-    async for p in db.payouts.find({"net_variance": {"$exists": False}}, {"_id": 0, "id": 1, "file_net_total": 1, "ledger": 1}):
+    async for p in db.payouts.find({"net_variance": {"$exists": False}, "ledger.lines.0": {"$exists": True}},
+                                   {"_id": 0, "id": 1, "file_net_total": 1, "ledger": 1}):
         await db.payouts.update_one({"id": p["id"]}, {"$set": {"net_variance": net_variance(p.get("file_net_total"), p["ledger"])}})
     if os.environ.get("DEMO_EMAIL") and os.environ.get("DEMO_PASSWORD"):
         await seed_demo_user()

@@ -43,6 +43,8 @@ CPA firm founders cleaning restaurant backlogs; solo virtual e-commerce bookkeep
 - Tested: iteration_1..7 (iteration_7: backend 21/21 via /app/backend_tests, frontend flows, Lambda warm invocations re-verified)
 - 2026-10-24: Payout Variance Note: backend net_variance {file_net, calculated_net (first ledger debit line), difference, flagged on any cent difference} on create + recalculate; splitter shows amber note when flagged, green match note otherwise. Ledger footer label renamed to "Debit/credit difference".
 - 2026-10-24: Textract: the AWS Organizations SCP denies textract:AnalyzeDocument for IAM user LedgerStream_Engine in every region (can't be fixed in code). The 424 response now explains the SCP block; the converter shows a persistent inline error banner; pages are not charged. Tested iteration_8 (backend 30/30, frontend pass)
+- 2026-10-24: Textract connection check: POST /api/statements/engine/check (keys -> STS credentials -> AnalyzeDocument on a built-in reportlab sample statement -> parse + reconcile 3 rows; statuses ready/scp_blocked/iam_denied/invalid_keys/not_subscribed/unreachable/parse_mismatch; 30s cooldown; no pages charged; saved per user in textract_checks; last_check on GET /api/statements/engine). Dashboard converter card shows the steps + "Run check again".
+- 2026-10-24: Variance in History: net_variance backfilled on startup for older payouts; History shows "Variance -$X" (amber) / "Matches file" (green) badges on payouts, Variance filter + count (/api/history?kind=variance, review-count.variance). Tested iteration_9 (backend 46/46, frontend pass)
 
 ## Backlog
 - P0: Add AWS keys and verify live Textract parsing on real statements
