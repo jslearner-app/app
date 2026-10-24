@@ -50,7 +50,7 @@ export function PaymentSuccess() {
     return <Card testId="payment-checking" icon={<Loader2 className="h-10 w-10 mx-auto animate-spin text-emerald-400" />} title="Confirming your payment" text="This only takes a few seconds." />;
   if (state === "paid")
     return (
-      <Card testId="payment-success" icon={<CheckCircle2 className="h-10 w-10 mx-auto text-emerald-400" />} title="Subscription active" text="Unlimited statement conversions are now unlocked for your firm.">
+      <Card testId="payment-success" icon={<CheckCircle2 className="h-10 w-10 mx-auto text-emerald-400" />} title="Subscription active" text="Your monthly parsed-page allowance is now active for your firm.">
         <LinkBtn to="/dashboard" testId="payment-success-dashboard-link">Go to dashboard</LinkBtn>
       </Card>
     );

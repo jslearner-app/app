@@ -7,7 +7,9 @@ import { PricingMatrix } from "@/components/billing/PricingMatrix";
 export default function Pricing() {
   const { user } = useAuth();
   const [params] = useSearchParams();
-  const limitHit = params.get("reason") === "trial_limit";
+  const reason = params.get("reason");
+  const limitHit = reason === "trial_limit" || reason === "monthly_limit";
+  const monthly = reason === "monthly_limit";
 
   return (
     <div data-testid="pricing-page">
@@ -15,8 +17,12 @@ export default function Pricing() {
         <div className="mb-8 flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4" data-testid="trial-limit-banner">
           <AlertTriangle className="h-5 w-5 text-amber-300 shrink-0 mt-0.5" />
           <div>
-            <div className="font-semibold text-amber-200">You've reached the 5-page free trial limit</div>
-            <div className="text-sm text-amber-100/70">You have used {user.pages_used} of 5 free pages. Choose a plan to keep converting statements.</div>
+            <div className="font-semibold text-amber-200">{monthly ? `You've reached your ${user.page_limit.toLocaleString()}-page monthly limit` : "You've reached the 5-page free trial limit"}</div>
+            <div className="text-sm text-amber-100/70">
+              {monthly
+                ? `You have used ${user.usage_pages.toLocaleString()} of ${user.page_limit.toLocaleString()} pages this month. ${user.plan === "starter" ? "Upgrade to Agency for 1,000 pages per month, or wait" : "Your allowance resets"} on ${user.period_resets_at}.`
+                : `You have used ${user.usage_pages} of 5 free pages. Choose a plan to keep converting statements.`}
+            </div>
           </div>
         </div>
       )}

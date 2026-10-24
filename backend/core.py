@@ -20,6 +20,7 @@ client, db = connect()
 JWT_ALGORITHM = "HS256"
 FREE_PAGE_LIMIT = 5
 PAID_PLANS = {"starter", "agency"}
+PLAN_PAGE_LIMITS = {"free": FREE_PAGE_LIMIT, "starter": 200, "agency": 1000}
 COOKIE_OPTS = dict(httponly=True, secure=True, samesite="none", path="/")
 
 
@@ -65,6 +66,49 @@ def set_auth_cookies(response, user_id: str, email: str):
     response.set_cookie("refresh_token", create_refresh_token(user_id), max_age=604800, **COOKIE_OPTS)
 
 
+def current_period() -> str:
+    return now().strftime("%Y-%m")
+
+
+def next_period_start() -> str:
+    n = now()
+    return (datetime(n.year + (n.month == 12), n.month % 12 + 1, 1, tzinfo=timezone.utc)).date().isoformat()
+
+
+def page_limit(u: dict) -> int:
+    return PLAN_PAGE_LIMITS.get(u.get("plan", "free"), FREE_PAGE_LIMIT)
+
+
+def usage_pages(u: dict) -> int:
+    """Pages counted against the limit: lifetime for the trial, current calendar month (UTC) for paid plans."""
+    if u.get("plan") not in PAID_PLANS:
+        return u.get("pages_used", 0)
+    return u.get("period_pages", 0) if u.get("usage_period") == current_period() else 0
+
+
+async def reserve_pages(u: dict, pages: int) -> bool:
+    """Atomically books pages against the plan limit; returns False when the limit would be exceeded."""
+    limit = page_limit(u)
+    if u.get("plan") not in PAID_PLANS:
+        res = await db.users.update_one(
+            {"user_id": u["user_id"], "pages_used": {"$lte": limit - pages}}, {"$inc": {"pages_used": pages}})
+        return res.modified_count == 1
+    period = current_period()
+    await db.users.update_one({"user_id": u["user_id"], "usage_period": {"$ne": period}},
+                              {"$set": {"usage_period": period, "period_pages": 0}})
+    res = await db.users.update_one(
+        {"user_id": u["user_id"], "usage_period": period, "period_pages": {"$lte": limit - pages}},
+        {"$inc": {"period_pages": pages, "pages_used": pages}})
+    return res.modified_count == 1
+
+
+async def release_pages(u: dict, pages: int):
+    inc = {"pages_used": -pages}
+    if u.get("plan") in PAID_PLANS:
+        inc["period_pages"] = -pages
+    await db.users.update_one({"user_id": u["user_id"]}, {"$inc": inc})
+
+
 def public_user(u: dict) -> dict:
     plan = u.get("plan", "free")
     return {
@@ -77,7 +121,10 @@ def public_user(u: dict) -> dict:
         "plan": plan,
         "subscription_status": u.get("subscription_status", "active_subscriber" if plan in PAID_PLANS else "trial"),
         "pages_used": u.get("pages_used", 0),
-        "page_limit": None if plan in PAID_PLANS else FREE_PAGE_LIMIT,
+        "usage_pages": usage_pages(u),
+        "page_limit": page_limit(u),
+        "limit_period": "month" if plan in PAID_PLANS else "trial",
+        "period_resets_at": next_period_start() if plan in PAID_PLANS else None,
     }
 
 

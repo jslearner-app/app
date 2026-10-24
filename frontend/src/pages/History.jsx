@@ -37,7 +37,7 @@ const Details = ({ it }) =>
   it.kind === "statement" ? (
     <span>{it.pages} page(s) · {it.summary?.transactions} txns</span>
   ) : (
-    <span>{platformName(it.platform)} · {money(it.gross_total)} gross @ {it.commission_rate}%</span>
+    <span>{platformName(it.platform)} · {money(it.gross_total)} gross {it.fee_column && it.platform === "lawpay" ? `· ${money(it.fee_total)} fees from file` : `@ ${it.commission_rate}%`}</span>
   );
 
 export default function History() {

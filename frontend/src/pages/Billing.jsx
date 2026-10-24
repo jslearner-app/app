@@ -39,7 +39,7 @@ export default function Billing() {
           <div className="text-[11px] uppercase tracking-wider text-slate-500">Current plan</div>
           <div className="mt-2 font-display text-2xl font-semibold text-slate-50" data-testid="billing-current-plan">{PLAN_LABEL[user.plan] || user.plan}</div>
           <p className="mt-2 text-sm text-slate-400">
-            {user.plan === "free" ? "Your free trial includes 5 bank statement pages. Upgrade for unlimited conversions." : "Unlimited statement conversions are active on your account."}
+            {user.plan === "free" ? "Your free trial includes 5 bank statement pages. Upgrade for up to 200 or 1,000 parsed pages per month." : `Your plan includes up to ${user.page_limit.toLocaleString()} parsed pages per month. The allowance resets on the 1st of each month (UTC).`}
           </p>
           <div className="flex-1" />
           <div className="mt-6 rounded-lg border border-slate-800 bg-slate-950/40 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" data-testid="customer-portal-card">

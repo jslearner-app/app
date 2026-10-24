@@ -32,7 +32,7 @@ export const SplitterPanel = ({ clients, onConverted }) => {
 
   useEffect(() => {
     const r = Number(rate);
-    if (!payout || rate === "" || r < 0 || r > 100 || r === lastRate.current) return;
+    if (!payout || platformMeta(payout.platform).fileFees || rate === "" || r < 0 || r > 100 || r === lastRate.current) return;
     const t = setTimeout(async () => {
       try {
         const { data } = await api.post(`/payouts/${payout.id}/recalculate`, { commission_rate: r });
@@ -80,13 +80,19 @@ export const SplitterPanel = ({ clients, onConverted }) => {
           <div className="mt-2"><ClientSelect clients={clients} value={clientId} onChange={setClientId} testId="splitter-client-select" /></div>
         </div>
         <PlatformPicker value={platform} onChange={choosePlatform} disabled={!!payout} />
+        {meta.fileFees ? (
+          <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-400" data-testid="file-fees-note">
+            <span className="text-slate-200 font-medium">Fees come from the file.</span> Each transaction's fee is read from the CSV fee column and summed, so no rate is needed.
+          </div>
+        ) : (
         <div>
-          <label htmlFor="commission-rate" className="text-xs uppercase tracking-wider text-slate-400">{meta.id === "lawpay" ? "Processing Fee Rate %" : "Platform Commission Rate %"}</label>
+          <label htmlFor="commission-rate" className="text-xs uppercase tracking-wider text-slate-400">Platform Commission Rate %</label>
           <div className="mt-2 flex items-center gap-3">
             <Input id="commission-rate" type="number" min="0" max="100" step="0.1" value={rate} onChange={(e) => setRate(e.target.value)} className="h-11 w-28 num bg-slate-950/50 border-slate-700" data-testid="commission-rate-input" />
             <RatePresets value={rate} onChange={setRate} presets={meta.presets} />
           </div>
         </div>
+        )}
         {!payout && (
           <div>
             <FileDropzone accept=".csv" title="Drop platform payout CSV" hint="Toast, DoorDash, UberEats, Shopify, Stripe or LawPay export" onFile={setFile} selectedName={file?.name} testId="payout-upload-dropzone" />
@@ -113,7 +119,11 @@ export const SplitterPanel = ({ clients, onConverted }) => {
               <div className="surface px-4 py-3"><div className="text-[11px] uppercase tracking-wider text-slate-500">Rows parsed</div><div className="num mt-1 text-slate-100" data-testid="payout-rows-parsed">{payout.rows_parsed}</div></div>
               <div className="surface px-4 py-3"><div className="text-[11px] uppercase tracking-wider text-slate-500">Gross column</div><div className="mt-1 truncate text-slate-100" data-testid="payout-gross-column">{payout.gross_column}</div></div>
               <div className="surface px-4 py-3"><div className="text-[11px] uppercase tracking-wider text-slate-500">Gross sales</div><div className="num mt-1 text-emerald-300" data-testid="payout-gross-total">{money(payout.gross_total)}</div></div>
-              <div className="surface px-4 py-3"><div className="text-[11px] uppercase tracking-wider text-slate-500">Net per file</div><div className="num mt-1 text-slate-100" data-testid="payout-file-net">{payout.file_net_total == null ? "Not found" : money(payout.file_net_total)}</div></div>
+              {platformMeta(payout.platform).fileFees ? (
+                <div className="surface px-4 py-3"><div className="text-[11px] uppercase tracking-wider text-slate-500">Fees per file</div><div className="num mt-1 text-slate-100" data-testid="payout-file-fees">{money(payout.fee_total)}</div><div className="text-[11px] text-slate-500 truncate">{payout.fee_line_items} line items · {payout.fee_column}</div></div>
+              ) : (
+                <div className="surface px-4 py-3"><div className="text-[11px] uppercase tracking-wider text-slate-500">Net per file</div><div className="num mt-1 text-slate-100" data-testid="payout-file-net">{payout.file_net_total == null ? "Not found" : money(payout.file_net_total)}</div></div>
+              )}
             </div>
             <LedgerMatrix ledger={payout.ledger} />
             <Button onClick={qbo} disabled={!payout.ledger.balanced} className="h-11 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-semibold" data-testid="download-qbo-csv-button">

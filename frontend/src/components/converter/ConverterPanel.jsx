@@ -39,7 +39,8 @@ export const ConverterPanel = ({ clients, onConverted }) => {
 
   const upload = async (file) => {
     if (!clientId) return toast.error("Select a client profile first");
-    if (user.page_limit && user.pages_used >= user.page_limit) return navigate("/pricing?reason=trial_limit");
+    const limitReason = user.plan === "free" ? "trial_limit" : "monthly_limit";
+    if (user.usage_pages >= user.page_limit) return navigate(`/pricing?reason=${limitReason}`);
     if (engine && !engine.configured) return toast.error("Amazon Textract is not connected yet. Add your AWS keys to enable PDF parsing.");
     setParsing(file.name);
     const form = new FormData();
@@ -55,7 +56,7 @@ export const ConverterPanel = ({ clients, onConverted }) => {
     } catch (e) {
       if (e.response?.status === 402) {
         toast.error(errMsg(e));
-        navigate("/pricing?reason=trial_limit");
+        navigate(`/pricing?reason=${limitReason}`);
       } else toast.error(errMsg(e));
     } finally {
       setParsing(null);
@@ -121,7 +122,7 @@ export const ConverterPanel = ({ clients, onConverted }) => {
           <p>Date · Description · Reference/Check # · Withdrawals · Deposits · Balance</p>
           {user.page_limit && (
             <p className="text-xs" data-testid="converter-pages-remaining">
-              <span className="num text-emerald-300">{Math.max(user.page_limit - user.pages_used, 0)}</span> of {user.page_limit} free trial pages remaining
+              <span className="num text-emerald-300">{Math.max(user.page_limit - user.usage_pages, 0).toLocaleString()}</span> of {user.page_limit.toLocaleString()} {user.limit_period === "month" ? "pages left this month" : "free trial pages remaining"}
             </p>
           )}
         </div>

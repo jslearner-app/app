@@ -81,13 +81,15 @@ async def split_payout(
         raise HTTPException(status_code=400, detail="Commission rate must be between 0 and 100")
     raw = await _read(file, ".csv")
     try:
-        parsed = await run_in_threadpool(payouts.parse_platform_csv, raw)
+        parsed = await run_in_threadpool(payouts.parse_platform_csv, raw, platform)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    if platform in payouts.FILE_FEE_PLATFORMS:
+        commission_rate = payouts.effective_rate(parsed["gross_total"], parsed["fee_total"])
     result = {
         "id": uuid.uuid4().hex, "platform": platform, "filename": file.filename, "client_name": client_name,
         **parsed, "commission_rate": commission_rate,
-        "ledger": payouts.build_ledger(parsed["gross_total"], commission_rate, platform),
+        "ledger": payouts.build_ledger(parsed["gross_total"], commission_rate, platform, parsed["fee_total"]),
     }
     if format == "qbo":
         return Response(payouts.ledger_to_qbo_csv(result), media_type="text/csv",

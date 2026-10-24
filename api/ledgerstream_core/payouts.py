@@ -12,6 +12,8 @@ PLATFORM_NAMES = {"toast": "Toast", "doordash": "DoorDash", "ubereats": "UberEat
                   "stripe": "Stripe", "lawpay": "LawPay"}
 GROSS_KEYWORDS = ("gross", "subtotal", "sales", "order total", "amount", "total")
 NET_KEYWORDS = ("net", "payout", "deposit")
+FEE_KEYWORDS = ("fee", "commission", "charge")
+FILE_FEE_PLATFORMS = {"lawpay"}
 QBO_HEADERS = ["Journal No", "Journal Date", "Account", "Debits", "Credits", "Description", "Name", "Memo"]
 
 SAMPLE_CSV = {
@@ -58,7 +60,11 @@ def _sum(series: pd.Series) -> Decimal:
     return sum((d2(v) for v in _to_number(series).dropna()), Decimal("0"))
 
 
-def parse_platform_csv(raw: bytes) -> dict:
+def effective_rate(gross_total: float, fee_total: float) -> float:
+    return float(d2(Decimal(str(fee_total)) / Decimal(str(gross_total)) * 100)) if gross_total else 0.0
+
+
+def parse_platform_csv(raw: bytes, platform: str = "") -> dict:
     try:
         df = pd.read_csv(io.BytesIO(raw), dtype=str, encoding_errors="replace")
     except Exception:
@@ -69,16 +75,23 @@ def parse_platform_csv(raw: bytes) -> dict:
     if gross_col is None:
         raise ValueError(f"Could not detect a gross sales column. Columns found: {', '.join(map(str, df.columns))}")
     net_col = _pick_column(df, NET_KEYWORDS, exclude=("fee", "commission", "date", "id", "count", "net sales"))
+    fee_col = _pick_column(df, FEE_KEYWORDS, exclude=("net", "gross", "rate", "%", "date", "id", "type"))
+    if platform in FILE_FEE_PLATFORMS and fee_col is None:
+        raise ValueError(f"Could not find a fee column in this file. Columns found: {', '.join(map(str, df.columns))}")
+    fees = _to_number(df[fee_col]).dropna() if fee_col is not None else pd.Series(dtype=float)
     return {
         "rows_parsed": int(len(df)),
         "gross_column": str(gross_col),
         "net_column": str(net_col) if net_col is not None else None,
         "gross_total": float(_sum(df[gross_col])),
         "file_net_total": float(_sum(df[net_col])) if net_col is not None else None,
+        "fee_column": str(fee_col) if fee_col is not None else None,
+        "fee_total": float(sum((abs(d2(v)) for v in fees), Decimal("0"))) if fee_col is not None else None,
+        "fee_line_items": int(len(fees)),
     }
 
 
-def _trust_ledger(gross: Decimal, fees: Decimal, rate_pct: float) -> dict:
+def _trust_ledger(gross: Decimal, fees: Decimal) -> dict:
     """LawPay trust deposits: full amount stays in trust, processing fees post against operating."""
     lines = [
         {"account": "Trust Bank Account (IOLTA)", "side": "debit", "debit": float(gross), "credit": 0.0,
@@ -86,7 +99,7 @@ def _trust_ledger(gross: Decimal, fees: Decimal, rate_pct: float) -> dict:
         {"account": "Client Trust Liability", "side": "credit", "debit": 0.0, "credit": float(gross),
          "memo": "Funds held in trust for clients"},
         {"account": "Credit Card Processing Fees", "side": "debit", "debit": float(fees), "credit": 0.0,
-         "memo": f"LawPay processing fees @ {rate_pct:g}%"},
+         "memo": "LawPay processing fees (line items from file)"},
         {"account": "Operating Bank Account", "side": "credit", "debit": 0.0, "credit": float(fees),
          "memo": "Fees paid from operating, not trust"},
     ]
@@ -95,12 +108,12 @@ def _trust_ledger(gross: Decimal, fees: Decimal, rate_pct: float) -> dict:
             "difference": 0.0, "balanced": True}
 
 
-def build_ledger(gross_total: float, commission_rate: float, platform: str = "") -> dict:
+def build_ledger(gross_total: float, commission_rate: float, platform: str = "", fee_total: float = None) -> dict:
     gross = d2(gross_total)
+    if platform in FILE_FEE_PLATFORMS:
+        return _trust_ledger(gross, d2(fee_total))
     rate = Decimal(str(commission_rate)) / Decimal("100")
     commission = d2(gross * rate)
-    if platform == "lawpay":
-        return _trust_ledger(gross, commission, commission_rate)
     net = gross - commission
     lines = [
         {"account": "Bank Clearing Account", "side": "debit", "debit": float(net), "credit": 0.0,

@@ -13,7 +13,7 @@ export const PLATFORMS = [
   { id: "ubereats", name: "UberEats", logo: "/logos/ubereats.svg", ...MARKETPLACE },
   { id: "shopify", name: "Shopify", logo: "/logos/shopify.svg", ...MARKETPLACE },
   { id: "stripe", name: "Stripe", logo: "/logos/stripe.svg", ...MARKETPLACE },
-  { id: "lawpay", name: "LawPay", logo: "/logos/lawpay.svg", defaultRate: "3", presets: ["2", "2.5", "3", "3.5"], ledger: ["Dr Trust Bank", "Cr Client Trust Liability", "Dr Card Processing Fees", "Cr Operating Bank"] },
+  { id: "lawpay", name: "LawPay", logo: "/logos/lawpay.svg", fileFees: true, defaultRate: "0", presets: [], ledger: ["Dr Trust Bank", "Cr Client Trust Liability", "Dr Card Processing Fees", "Cr Operating Bank"] },
 ];
 
 export const platformMeta = (id) => PLATFORMS.find((p) => p.id === id) || PLATFORMS[0];

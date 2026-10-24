@@ -10,7 +10,10 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from core import db, now, new_id, get_current_user, get_owned_client, FREE_PAGE_LIMIT, PAID_PLANS
+from core import (
+    db, now, new_id, get_current_user, get_owned_client, PAID_PLANS,
+    reserve_pages, release_pages, page_limit, usage_pages, next_period_start,
+)
 from ledgerstream_core import payouts as le, reconciliation as rc, statements as tp
 from ledgerstream_core.schemas import StatementRows
 
@@ -120,20 +123,20 @@ async def convert_statement(
         pages = await run_in_threadpool(tp.count_pages, raw)
     except Exception:
         raise HTTPException(status_code=400, detail="This file is not a readable PDF")
-    query = {"user_id": user["user_id"]}
-    if user.get("plan") not in PAID_PLANS:
-        query["pages_used"] = {"$lte": FREE_PAGE_LIMIT - pages}
-    reserved = await db.users.update_one(query, {"$inc": {"pages_used": pages}})
-    if reserved.matched_count == 0:
-        remaining = max(FREE_PAGE_LIMIT - user.get("pages_used", 0), 0)
-        raise HTTPException(
-            status_code=402,
-            detail=f"Free trial limit reached: this statement has {pages} page(s) and you have {remaining} of {FREE_PAGE_LIMIT} free pages left. Upgrade to continue.",
-        )
+    if not await reserve_pages(user, pages):
+        limit, used = page_limit(user), usage_pages(user)
+        remaining = max(limit - used, 0)
+        if user.get("plan") in PAID_PLANS:
+            detail = (f"Monthly page limit reached: your {user['plan'].title()} plan includes {limit} pages per month and "
+                      f"{remaining} are left, but this statement has {pages} page(s). The allowance resets on {next_period_start()}.")
+        else:
+            detail = (f"Free trial limit reached: this statement has {pages} page(s) and you have {remaining} of "
+                      f"{limit} free pages left. Upgrade to continue.")
+        raise HTTPException(status_code=402, detail=detail)
     try:
         rows = await run_in_threadpool(tp.run_pipeline, raw)
     except Exception as e:
-        await db.users.update_one({"user_id": user["user_id"]}, {"$inc": {"pages_used": -pages}})
+        await release_pages(user, pages)
         logger.exception("Textract pipeline failed")
         reason = str(e) if isinstance(e, (tp.TextractError, tp.TextractNotConfigured)) else "Statement parsing failed"
         raise HTTPException(status_code=424, detail=f"{reason}. Your pages were not charged.")
@@ -227,14 +230,16 @@ async def split_payout(
         raise HTTPException(status_code=400, detail="Commission rate must be between 0 and 100")
     raw = await _read_upload(file)
     try:
-        parsed = await run_in_threadpool(le.parse_platform_csv, raw)
+        parsed = await run_in_threadpool(le.parse_platform_csv, raw, platform)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    if platform in le.FILE_FEE_PLATFORMS:
+        commission_rate = le.effective_rate(parsed["gross_total"], parsed["fee_total"])
     doc = {
         "id": new_id("pay"), "kind": "payout", "owner_id": user["user_id"],
         "client_id": client["id"], "client_name": client["name"], "platform": platform,
         "filename": file.filename, **parsed, "commission_rate": commission_rate,
-        "ledger": le.build_ledger(parsed["gross_total"], commission_rate, platform), "created_at": now().isoformat(),
+        "ledger": le.build_ledger(parsed["gross_total"], commission_rate, platform, parsed["fee_total"]), "created_at": now().isoformat(),
     }
     await db.payouts.insert_one(doc)
     doc.pop("_id", None)
@@ -256,6 +261,8 @@ async def get_payout(payout_id: str, user: dict = Depends(get_current_user)):
 @router.post("/payouts/{payout_id}/recalculate")
 async def recalculate_payout(payout_id: str, body: RateIn, user: dict = Depends(get_current_user)):
     doc = await _owned_payout(user, payout_id)
+    if doc["platform"] in le.FILE_FEE_PLATFORMS:
+        raise HTTPException(status_code=400, detail="LawPay fees are read from the file and can't be recalculated with a rate")
     ledger = le.build_ledger(doc["gross_total"], body.commission_rate, doc["platform"])
     await db.payouts.update_one({"id": payout_id, "owner_id": user["user_id"]},
                                 {"$set": {"commission_rate": body.commission_rate, "ledger": ledger}})
