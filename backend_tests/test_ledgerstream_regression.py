@@ -36,6 +36,7 @@ def demo():
     r = s.post(f"{API}/auth/login", json=DEMO)
     if r.status_code != 200:
         pytest.skip(f"demo login failed {r.status_code} {r.text}")
+    s.headers["X-CSRF-Token"] = r.json()["csrf_token"]
     yield s
     mdb.users.update_one({"email": DEMO["email"]}, {"$set": {"pages_used": 0, "plan": "free", "subscription_status": "trial"}})
 
@@ -97,6 +98,7 @@ def test_register_refresh_logout():
     try:
         r = s.post(f"{API}/auth/register", json={"name": "TEST_User", "email": email, "password": "Passw0rd!x"})
         assert r.status_code == 200 and r.json()["email"] == email and r.json()["low_page_alert"] is False
+        s.headers["X-CSRF-Token"] = r.json()["csrf_token"]
         assert mdb.users.find_one({"email": email})["password_hash"].startswith("$2b$")
         assert s.post(f"{API}/auth/register", json={"name": "x", "email": email, "password": "Passw0rd!x"}).status_code == 400
         assert s.post(f"{API}/auth/refresh").status_code == 200
@@ -120,7 +122,8 @@ def test_clients_crud_and_isolation(demo):
     # other user cannot see / modify
     other = requests.Session()
     email = f"test_{uuid.uuid4().hex[:8]}@example.com"
-    other.post(f"{API}/auth/register", json={"name": "TEST_Other", "email": email, "password": "Passw0rd!x"})
+    ro = other.post(f"{API}/auth/register", json={"name": "TEST_Other", "email": email, "password": "Passw0rd!x"})
+    other.headers["X-CSRF-Token"] = ro.json()["csrf_token"]
     try:
         assert all(x["id"] != c["id"] for x in other.get(f"{API}/clients").json())
         assert other.put(f"{API}/clients/{c['id']}", json={"name": "hack"}).status_code == 404
@@ -229,7 +232,8 @@ def test_checkout_and_portal(demo):
     assert r.status_code == 200, r.text
     assert r.json()["checkout_url"].startswith("https://checkout.stripe.com")
     sid = r.json()["session_id"]
-    st = requests.get(f"{API}/payments/status/{sid}").json()
+    assert requests.get(f"{API}/payments/status/{sid}").status_code == 401
+    st = demo.get(f"{API}/payments/status/{sid}").json()
     assert st["payment_status"] in ("pending", "unpaid") and st["plan"] == "starter"
     assert demo.post(f"{API}/payments/checkout", json={"plan": "gold", "origin_url": BASE_URL}).status_code == 400
     assert demo.post(f"{API}/billing/portal", json={"origin_url": BASE_URL}).status_code == 400

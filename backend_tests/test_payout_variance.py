@@ -11,6 +11,7 @@ def s():
     r = sess.post(f"{API}/auth/login", json=DEMO)
     if r.status_code != 200:
         pytest.skip("login failed")
+    sess.headers["X-CSRF-Token"] = r.json()["csrf_token"]
     yield sess
     mdb.users.update_one({"email": DEMO["email"]}, {"$set": {"pages_used": 0, "plan": "free", "subscription_status": "trial"}})
 

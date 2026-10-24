@@ -24,7 +24,7 @@ import pandas as pd
 import stripe
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from mangum import Mangum
@@ -105,12 +105,13 @@ def _jwt_secret() -> str:
 
 
 def create_access_token(user_id: str, email: str) -> str:
-    payload = {"sub": user_id, "email": email, "exp": now() + timedelta(minutes=15), "type": "access"}
+    payload = {"sub": user_id, "email": email, "iat": int(now().timestamp()),
+               "exp": now() + timedelta(minutes=15), "type": "access"}
     return jwt.encode(payload, _jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
 def create_refresh_token(user_id: str) -> str:
-    payload = {"sub": user_id, "exp": now() + timedelta(days=7), "type": "refresh"}
+    payload = {"sub": user_id, "iat": int(now().timestamp()), "exp": now() + timedelta(days=7), "type": "refresh"}
     return jwt.encode(payload, _jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
@@ -130,8 +131,13 @@ def set_auth_cookies(response, user_id: str, email: str) -> str:
 
 # ---------- CSRF: token = HMAC of the long-lived session cookie, sent back in X-CSRF-Token ----------
 CSRF_COOKIES = ("refresh_token", "session_token")
-CSRF_EXEMPT = ("/api/auth/login", "/api/auth/register", "/api/auth/google/session", "/api/auth/forgot-password",
-               "/api/auth/reset-password", "/api/auth/refresh", "/api/auth/logout", "/api/webhooks/", "/api/stripe/webhook")
+CSRF_EXEMPT_PATHS = {"/api/auth/login", "/api/auth/register", "/api/auth/google/session", "/api/auth/forgot-password",
+                     "/api/auth/reset-password", "/api/auth/refresh", "/api/auth/logout", "/api/stripe/webhook"}
+CSRF_EXEMPT_PREFIXES = ("/api/webhooks/",)
+
+
+def csrf_exempt(path: str) -> bool:
+    return path in CSRF_EXEMPT_PATHS or path.startswith(CSRF_EXEMPT_PREFIXES)
 
 
 def csrf_token_for(base: str) -> str:
@@ -149,7 +155,8 @@ def csrf_valid(request: Request) -> bool:
 
 
 def client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    """Last X-Forwarded-For hop is appended by our proxy; earlier entries are client-controlled."""
+    forwarded = request.headers.get("x-forwarded-for", "").split(",")[-1].strip()
     return forwarded or (request.client.host if request.client else "unknown")
 
 
@@ -184,12 +191,19 @@ async def _user_from_session(token: str):
     return await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0, "password_hash": 0})
 
 
+def token_revoked(user: dict, payload: dict) -> bool:
+    """Tokens issued before the last password reset are no longer accepted."""
+    changed = user.get("password_changed_at")
+    return bool(changed) and payload.get("iat", 0) < int(_as_utc(changed).timestamp())
+
+
 async def _user_from_jwt(token: str):
     try:
         payload = decode_token(token, "access")
     except jwt.InvalidTokenError:
         return None
-    return await db.users.find_one({"user_id": payload["sub"]}, {"_id": 0, "password_hash": 0})
+    user = await db.users.find_one({"user_id": payload["sub"]}, {"_id": 0, "password_hash": 0})
+    return None if not user or token_revoked(user, payload) else user
 
 
 async def get_current_user(request: Request) -> dict:
@@ -1040,8 +1054,8 @@ async def refresh(request: Request, response: Response):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
     user = await db.users.find_one({"user_id": payload["sub"]}, {"_id": 0})
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+    if not user or token_revoked(user, payload):
+        raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
     response.set_cookie("access_token", create_access_token(user["user_id"], user["email"]), max_age=900, **COOKIE_OPTS)
     return {"ok": True}
 
@@ -1056,12 +1070,21 @@ async def logout(request: Request, response: Response):
     return {"ok": True}
 
 
+async def _send_reset_email(user: dict, link: str):
+    try:
+        await send_email(to=user["email"], subject=f"Reset your {EMAIL_FROM_NAME} password",
+                         html=_render_reset_email(user.get("name", ""), link))
+    except HTTPException as e:
+        logger.warning("Password reset email failed for %s: %s", user["user_id"], e.detail)
+
+
 @app.post("/api/auth/forgot-password")
-async def forgot_password(body: ForgotIn, request: Request):
+async def forgot_password(body: ForgotIn, request: Request, background: BackgroundTasks):
     await throttle(request, "forgot", 5)
     user = await db.users.find_one({"email": body.email.lower()}, {"_id": 0})
     if user:
         token = secrets.token_urlsafe(32)
+        await db.password_reset_tokens.update_many({"user_id": user["user_id"], "used": False}, {"$set": {"used": True}})
         await db.password_reset_tokens.insert_one({
             "token": token, "user_id": user["user_id"], "used": False,
             "expires_at": now() + timedelta(hours=1),
@@ -1070,11 +1093,7 @@ async def forgot_password(body: ForgotIn, request: Request):
             base = trusted_origin(request.headers.get("origin", ""), request)
         except HTTPException:
             base = ALLOWED_ORIGINS[0]
-        try:
-            await send_email(to=user["email"], subject=f"Reset your {EMAIL_FROM_NAME} password",
-                             html=_render_reset_email(user.get("name", ""), f"{base}/reset-password?token={token}"))
-        except HTTPException as e:
-            logger.warning("Password reset email failed for %s: %s", user["user_id"], e.detail)
+        background.add_task(_send_reset_email, user, f"{base}/reset-password?token={token}")
     return {"ok": True}
 
 
@@ -1102,8 +1121,10 @@ async def reset_password(body: ResetIn):
         raise HTTPException(status_code=400, detail="Invalid or used reset token")
     if _as_utc(rec["expires_at"]) < now():
         raise HTTPException(status_code=400, detail="Reset token expired")
-    await db.users.update_one({"user_id": rec["user_id"]}, {"$set": {"password_hash": hash_password(body.password)}})
-    await db.password_reset_tokens.update_one({"token": body.token}, {"$set": {"used": True}})
+    await db.users.update_one({"user_id": rec["user_id"]}, {"$set": {
+        "password_hash": hash_password(body.password), "password_changed_at": now()}})
+    await db.password_reset_tokens.update_many({"user_id": rec["user_id"]}, {"$set": {"used": True}})
+    await db.user_sessions.delete_many({"user_id": rec["user_id"]})
     return {"ok": True}
 
 
@@ -1768,7 +1789,7 @@ async def init_once(request: Request, call_next):
 async def csrf_protect(request: Request, call_next):
     unsafe = request.method in ("POST", "PUT", "PATCH", "DELETE")
     has_session = any(request.cookies.get(n) for n in (*CSRF_COOKIES, "access_token"))
-    if unsafe and has_session and not request.url.path.startswith(CSRF_EXEMPT) and not csrf_valid(request):
+    if unsafe and has_session and not csrf_exempt(request.url.path) and not csrf_valid(request):
         return JSONResponse({"detail": "Security check failed. Refresh the page and try again."}, status_code=403)
     return await call_next(request)
 

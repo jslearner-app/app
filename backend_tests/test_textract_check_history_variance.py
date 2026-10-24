@@ -13,6 +13,7 @@ def s():
     r = sess.post(f"{API}/auth/login", json=DEMO)
     if r.status_code != 200:
         pytest.skip("login failed")
+    sess.headers["X-CSRF-Token"] = r.json()["csrf_token"]
     uid = sess.get(f"{API}/auth/me").json()["user_id"]
     mdb.textract_checks.delete_many({"user_id": uid})
     sess.uid = uid
@@ -26,6 +27,7 @@ def other():
     email = f"test_iso_{uuid.uuid4().hex[:6]}@example.com"
     r = sess.post(f"{API}/auth/register", json={"email": email, "password": "TestPass#2026", "name": "TEST Iso", "firm_name": "TEST Firm"})
     assert r.status_code == 200, r.text
+    sess.headers["X-CSRF-Token"] = r.json()["csrf_token"]
     yield sess
     u = mdb.users.find_one({"email": email})
     if u:

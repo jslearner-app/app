@@ -1,0 +1,56 @@
+{
+  "summary": "I tested the security-audit fixes in the backend and the UI. Backend: 64 pytest tests across 7 files; 63 pass. The existing regression suites (46 tests) were updated to send X-CSRF-Token and all pass. The new suite test_security_audit.py has 16 tests (15 pass), plus test_security_google_session.py with 2 tests (both pass). Working as intended: CORS allowlist (evil.example not reflected; preview origin allowed with x-csrf-token); CSRF (403 without the header, with a wrong header or with another user's token; succeeds with the token from login/register/me; exempt auth and webhook routes work with cookies; no cookie gives 401; Google session_token cookies are covered); forgot/reset (generic {ok:true}, token stored, token absent from supervisor logs, invalid/used token 400, short password 422, old password rejected and new one works, email 202 for @example.com); formula neutralisation in QBO CSV, variance CSV, statement CSV and XLSX; payments/status (401 without login, 404 for another user); checkout/portal origin_url (evil.example and http:// get 400, preview works, a spoofed X-Forwarded-Host is rejected through the ingress); forgot rate limit (429 on the 6th call). One failure: rotating X-Forwarded-For bypasses the rate limit. UI (Playwright, 1920 and 390): register, client create/edit/delete, payout split, recalculate (200), QBO download with an apostrophe-prefixed formula, history delete, variance export (apostrophe present), split after a full reload (CSRF comes from /auth/me), statement upload 424 SCP message, Textract check showing 'Blocked by AWS Organization', checkout reaching checkout.stripe.com, logout, forgot page sent message, reset invalid/mismatch/no-token messages, reset with a real token and login with the new password, and mobile layouts at 390px (no horizontal overflow). The contact form returns 502 because the desk address support@ledgerstreamai.com is on a domain that does not resolve, so the email service blocks it. This is not caused by CSRF.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "throttle()/client_ip() - /api/auth/forgot-password, /api/auth/register, /api/auth/login lockout", "issue": "client_ip() uses the FIRST X-Forwarded-For entry, which the client controls (the ingress appends the real IP). Sending a different X-Forwarded-For on each request bypasses the forgot-password 5/hour limit (7/7 returned 200; keys forgot:10.9.0.1..10.9.6.1). The same applies to the register 20/hour limit and the per-IP login lockout identifier.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "/api/contact", "issue": "Returns 502: Emergent email answers 422 undeliverable_recipient for SUPPORT_DESK_EMAIL support@ledgerstreamai.com because the domain ledgerstreamai.com does not resolve. This is config/env, not a regression. Set a real desk inbox (or delivered@resend.dev for testing)."},
+      {"endpoint": "/api/auth/reset-password", "issue": "After a reset, the user's existing refresh tokens and user_sessions are not revoked, so a hijacked session survives a password reset. Also, unused reset tokens are not invalidated when a new one is issued."},
+      {"endpoint": "/api/auth/forgot-password", "issue": "The email is sent inline. Response time differs for existing and unknown accounts (about 1 s vs a few ms), which allows timing-based account enumeration. Consider sending in the background."},
+      {"endpoint": "trusted_origin()", "issue": "Same-host trust relies on Host/X-Forwarded-Host. On the preview ingress a spoofed X-Forwarded-Host is ignored (test passes), but on Vercel/Lambda behind API Gateway check that the forwarded host cannot be set by the client, or rely only on CORS_ORIGINS."},
+      {"endpoint": "csrf_protect", "issue": "The exemption uses path.startswith, so '/api/auth/login' also exempts any future route such as '/api/auth/login-xyz'. Prefer exact matching for the auth routes."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Contact form submit", "issue": "502 from the backend (undeliverable desk email). The UI shows no success state. Root cause is the env config above, not CSRF (the request passed CSRF).", "affected_selectors": ["[data-testid='contact-submit-button']", "[data-testid='contact-form-success']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend_tests/test_security_audit.py",
+    "/app/backend_tests/test_security_google_session.py",
+    "/app/backend_tests/test_ledgerstream_regression.py",
+    "/app/backend_tests/test_payout_variance.py",
+    "/app/backend_tests/test_textract_check_history_variance.py",
+    "/app/test_reports/pytest/iteration_10_all.xml"
+  ],
+  "action_items": [
+    "HIGH: Fix client_ip() so X-Forwarded-For cannot be spoofed. Take the right-most entry appended by the trusted proxy (or a configurable trusted hop count), or on Lambda use requestContext.identity.sourceIp. This affects the forgot-password and register rate limits and the login lockout.",
+    "Set SUPPORT_DESK_EMAIL/SALES_DESK_EMAIL to deliverable addresses; the contact form currently returns 502.",
+    "On reset-password, revoke the user's sessions (delete user_sessions, add a token version/password_changed_at check to refresh tokens) and mark other outstanding reset tokens as used.",
+    "Optional: send the forgot-password email in the background to avoid timing enumeration; use exact-path CSRF exemptions."
+  ],
+  "critical_code_review_comments": [
+    "lambda_function.py is 1789 lines in one file. Split it into modules (auth, payments, exports, payouts, statements).",
+    "client_ip() trusts the first X-Forwarded-For hop (see action item).",
+    "The CSRF token is HMAC(JWT_SECRET, refresh_token). Each login issues a new token, so any other open tab of the same user gets 403 on writes until it reloads (the old tab's in-memory csrfToken is stale). Consider retrying once on a 403 'Security check failed' by calling /auth/me to refresh the token.",
+    "Middleware order is correct: CORS is outermost, so the 403 CSRF responses still carry CORS headers.",
+    "safe_cell does not handle leading whitespace before '=' (e.g. ' =1+1'). Minor; Excel usually treats it as text."
+  ],
+  "updated_files": [
+    "/app/backend_tests/test_ledgerstream_regression.py (X-CSRF-Token from login/register; payments/status now via authenticated session + 401 assertion)",
+    "/app/backend_tests/test_payout_variance.py (X-CSRF-Token)",
+    "/app/backend_tests/test_textract_check_history_variance.py (X-CSRF-Token)",
+    "/app/backend_tests/test_security_audit.py (new)",
+    "/app/backend_tests/test_security_google_session.py (new)"
+  ],
+  "success_rate": {"backend": "98% (63/64; the only failure is the XFF rate-limit bypass)", "frontend": "95% (all flows pass except the contact form, which fails because of the email config)"},
+  "seed_data_creation": "Created temporary TEST_ users (@example.com), clients (including '=HYPERLINK(\"x\")'), payouts, statements, payment_transactions, a contact_message, reset tokens and rate_limits. All were deleted. The demo account was verified at plan free, pages_used 0, 0 payouts, 0 statements, 0 transactions; its 2 seeded clients are intact.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: pytest /app/backend_tests -q. Every test session must send X-CSRF-Token from the login/register response. The token changes on every login (it is tied to the refresh_token cookie), so re-capture it after any re-login. test_forgot_rate_limit_xff_spoof is expected to fail until client_ip is fixed. Rate-limit tests clear db.rate_limits. Textract SCP 424 is expected. The contact form 502 is caused by the undeliverable desk email domain.",
+  "rca of the issue": "XFF bypass: client_ip() returns request.headers['x-forwarded-for'].split(',')[0]. The Kubernetes ingress (and API Gateway/Vercel) append the real client IP to whatever X-Forwarded-For the client sent, so index 0 is attacker-controlled. Repro: POST /api/auth/forgot-password 7 times with X-Forwarded-For: 10.9.{i}.1 and all return 200. Mitigation: use the last hop, or a trusted-proxy-count based hop. Contact 502: SUPPORT_DESK_EMAIL=support@ledgerstreamai.com does not resolve in DNS, and Emergent email rejects it with 422 undeliverable_recipient, which the backend maps to 502."
+}
