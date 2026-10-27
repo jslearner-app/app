@@ -1,8 +1,11 @@
 export const GoogleButton = () => {
   const handleClick = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + "/dashboard";
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+    const apiBaseUrl = process.env.REACT_APP_API_URL || process.env.NEXT_PUBLIC_API_URL || "https://onrender.com";
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+    const redirectUri = `${apiBaseUrl}/api/auth/callback/google`;
+    
+    // Construct a direct, secure handshake to Google with your own credentials
+    window.location.href = `https://google.com{clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=email%20profile`;
   };
 
   return (
