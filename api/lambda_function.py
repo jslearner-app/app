@@ -71,6 +71,9 @@ PLAN_LOOKUP = {"starter": "starter_monthly", "agency": "agency_monthly"}
 
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 EMAIL_BASE_URL = "https://integrations.emergentagent.com"
+EMERGENT_SESSION_URL = os.environ.get("GOOGLE_SESSION_URL", "https://googleapis.com")
+EMAIL_BASE_URL = os.environ.get("NEXT_PUBLIC_SITE_URL", "https://ledgerstreamai.com")
+
 EMAIL_KEY = os.environ["EMERGENT_EMAIL_KEY"]
 EMAIL_FROM_NAME = os.environ["EMAIL_FROM_NAME"]
 EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")
