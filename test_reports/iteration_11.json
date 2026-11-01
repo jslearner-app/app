@@ -1,0 +1,60 @@
+{
+  "summary": "I tested the switch to your own Google OAuth and the move to Google Document AI (both not configured in preview), plus a full regression. Backend: 68 pytest tests across 6 files; 67 pass. The one failure is test_forgot_rate_limit_xff_spoof and it is flaky: it failed 1 time in 4 runs. The cause is the test machine's outbound traffic switching between two NAT IPs (34.170.12.145 and 35.193.209.116), which splits the counter across two keys. A spoofed X-Forwarded-For is no longer used as the key, so this is not an app bug. Verified: /api/health returns parser_configured:false. /statements/engine returns google_document_ai with configured:false. engine/check returns not_configured with a single config step, and a second call within 30 s returns 429. POST /statements with a PDF returns 503 'Google Document AI is not connected yet...' and charges no pages. The 15-page cap was checked in-process with a faked configuration: a 16-page PDF returns 400 'up to 15 pages' with no pages charged, and a 15-page PDF returns 200 with engine google_document_ai. The Document AI functions were unit-tested: entities_to_dataframe, statement_totals, _reconcile_totals, run_docai_diagnostic (not_configured, invalid_credentials, ready, parse_mismatch, permission_denied), docai_failure and the _connect_database DATABASE_URL/MONGO_URL fallback. /auth/google returns 400 for an untrusted origin, a wrong path, an http:// scheme and a bare '/'. The preview origin with a fake code returns 500 KeyError 'GOOGLE_CLIENT_ID' (flagged as requested). /auth/google/session and /webhooks/textract return 404. CORS echoes https://ledgerstreamai.com and the preview origin, and blocks evil.example. The full regression passes: login, register, CSRF, clients CRUD, payout splits for all platforms, exact LawPay fees and variance, recalculate, QBO CSV, history with the variance filter and export, checkout, forgot/reset password, and contact validation. Frontend (1920 and 390 px): the Google button is disabled with the tooltip 'Google sign-in isn't configured yet'. The converter shows the not-connected banner and the Document AI connection card (status 'Google keys missing', cooldown toast on a second click). The landing page mentions Google Document AI and there is no 'Textract' anywhere. The LawPay split in the UI gave fees of $199.13 and a balanced $6,949.13 entry, and the QBO download and history delete both worked. There is no horizontal overflow at 390 px. Bug found and fixed: visiting /auth/google?code=x&state=bad redirected to /login but showed no error toast. After the fix the toast appears for bad state, error=access_denied and a missing state.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/google", "issue": "Without GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET, a valid redirect_uri raises KeyError and returns a plain-text 500 'Internal Server Error'. The 500 is produced outside CORSMiddleware, so it has no CORS headers and the browser sees a network error; the UI toast says 'Something went wrong'. This is expected until the keys are added. Better: return 503 'Google sign-in isn't configured yet' when the keys are missing."},
+      {"endpoint": "/api/contact", "issue": "Known: 502 because the support@ledgerstreamai.com desk email domain is undeliverable (env config)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AuthCallback / App.js Toaster", "issue": "FIXED by testing agent: failure toasts on /auth/google were lost. <Toaster> was rendered after <AppRouter>, so AuthCallback's first effect called toast() before the Toaster had subscribed (sonner 2.0.3). The Toaster now renders before AppRouter. Verified that the toasts 'Google sign-in expired. Please try again.' and 'Google sign-in was cancelled.' show on /login.", "selector": "[data-sonner-toast]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Login (mobile)", "issues": ["The reason the Google button is disabled is only in a title tooltip, which does not show on touch devices. Consider a small helper line under the button."]},
+      {"screen": "Dashboard (390px)", "issues": ["The module tabs (Bank Statement Converter / Merchant Payout Splitter) stack with different widths and are centred instead of full width, which looks slightly uneven."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend_tests/test_google_oauth_cors.py",
+    "/app/backend_tests/test_docai_unit.py",
+    "/app/backend_tests/test_docai_check_history_variance.py",
+    "/app/backend_tests/test_ledgerstream_regression.py",
+    "/app/backend_tests/test_payout_variance.py",
+    "/app/backend_tests/test_security_audit.py",
+    "/app/test_reports/pytest/iteration_11_all.xml"
+  ],
+  "action_items": [
+    "In google_login, check that GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are present and return 503 with a clear message instead of a KeyError 500.",
+    "In frontend/src/lib/api.js, the NO_RETRY list still has '/auth/google/session'. Change it to '/auth/google' so a 401 from the code exchange does not trigger /auth/refresh and replay a single-use code.",
+    "Update /app/memory/test_credentials.md: it still describes Emergent-managed Google login and POST /api/auth/google/session.",
+    "Optional: on mobile, show why the Google button is disabled."
+  ],
+  "critical_code_review_comments": [
+    "lambda_function.py is about 1790 lines in one file. Split it into modules (auth, statements/docai, payouts, billing, email).",
+    "convert_statement returns 503 for the missing configuration before page counting, so a 402 page-cap response can't happen until Document AI is configured. The order is fine, but the page-cap regression test now accepts 503.",
+    "entities_to_dataframe drops any table_item without a date, and withdrawal/deposit dates come only from the deposit/withdrawal date properties. Check this with a real Bank Statement Parser output once the keys exist.",
+    "docai_client caches one client per config tuple and clears the cache whenever the configuration changes. That is fine for Lambda.",
+    "csrf_valid only uses the refresh_token cookie. A request carrying only an access_token cookie (with no refresh cookie) always gets 403 on writes. This is an edge case and not reachable from the UI."
+  ],
+  "updated_files": [
+    "/app/frontend/src/App.js (Toaster moved before AppRouter)",
+    "/app/backend_tests/test_google_oauth_cors.py (new)",
+    "/app/backend_tests/test_docai_unit.py (new, replaces test_textract_diagnostic_unit.py)",
+    "/app/backend_tests/test_docai_check_history_variance.py (renamed from test_textract_check_history_variance.py; not_configured, engine_checks collection)",
+    "/app/backend_tests/test_ledgerstream_regression.py (engine google_document_ai, webhooks/textract 404, page cap accepts 503)",
+    "/app/backend_tests/test_payout_variance.py (Document AI 503 instead of the Textract 424)",
+    "/app/backend_tests/test_security_audit.py (webhooks/textract 404)",
+    "Removed /app/backend_tests/test_security_google_session.py and test_textract_diagnostic_unit.py (the endpoints and session_token cookie no longer exist)"
+  ],
+  "success_rate": {"backend": "98.5% (67/68; the 1 failure is a flaky test-environment NAT issue)", "frontend": "100% after the toast fix"},
+  "flaky_tests": [{"test": "test_security_audit.py::test_forgot_rate_limit_xff_spoof", "failure_rate": "1 of 4 runs", "reason": "The test runner's outbound IP alternates between two NAT addresses, so the rate-limit counter splits across two keys."}],
+  "seed_data_creation": "Temporary TEST_ users (@example.com), clients, payouts, statements, engine_checks and rate_limits were all deleted. The demo account ends at plan free, pages_used 0, 0 payouts, 0 statements and 0 transactions, with its 2 seeded clients intact.",
+  "test_credentials": "demo@ledgerstream.ai / LedgerDemo#2026 works. The test_credentials.md Google section is outdated.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: pytest /app/backend_tests -q. Tests need X-CSRF-Token from the login/register response. In-process tests (test_docai_unit.py) use a Bearer token to avoid CSRF and fake the Document AI configuration with monkeypatch. Once the real Google OAuth and Document AI keys are set: /auth/google with a fake code should return 401, engine/check should return ready or an error status, and test_docai_check_history_variance / test_payout_variance::test_docai_not_configured_503 will need updating. The engine check collection is engine_checks.",
+  "rca of the issue": "Missing callback toast: App.js rendered <AppRouter/> before <Toaster/>. React runs child effects in tree order, so AuthCallback's useEffect called toast.error() and navigate() before sonner's Toaster subscribed to ToastState, and the toast was dropped. Repro: open /auth/google?code=x&state=bad; you land on /login with no toast. Fix: render <Toaster/> before <AppRouter/>. KeyError 500: google_login reads os.environ['GOOGLE_CLIENT_ID'] after the redirect checks pass."
+}

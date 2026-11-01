@@ -447,6 +447,54 @@ def entities_to_dataframe(document) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
+def _layout_text(document, layout) -> str:
+    segments = layout.text_anchor.text_segments
+    return " ".join("".join(document.text[int(s.start_index):int(s.end_index)] for s in segments).split())
+
+
+def _map_columns(headers: list) -> dict:
+    """Maps header cell index -> canonical ledger column using COLUMN_KEYWORDS."""
+    mapping, used = {}, set()
+    for idx, header in enumerate(headers):
+        h = header.lower()
+        for canonical, keywords in COLUMN_KEYWORDS:
+            if canonical not in used and any(k in h for k in keywords):
+                mapping[idx] = canonical
+                used.add(canonical)
+                break
+    return mapping
+
+
+def tables_to_dataframe(document) -> pd.DataFrame:
+    """Form Parser fallback: reads detected tables whose header has at least Date + Description columns."""
+    records = []
+    for page in document.pages:
+        for table in page.tables:
+            rows = [*table.header_rows, *table.body_rows]
+            texts = [[_layout_text(document, c.layout) for c in r.cells] for r in rows]
+            header_idx = next((i for i, t in enumerate(texts)
+                               if {"date", "description"} <= set(_map_columns(t).values())), None)
+            if header_idx is None:
+                continue
+            mapping = _map_columns(texts[header_idx])
+            for cells in texts[header_idx + 1:]:
+                records.append({canon: cells[i] if i < len(cells) else "" for i, canon in mapping.items()})
+    df = pd.DataFrame(records, columns=STATEMENT_COLUMNS).fillna("")
+    df["date"] = df["date"].astype(str).str.strip()
+    df = df[df["date"] != ""]
+    for col in AMOUNT_COLUMNS:
+        df[col] = df[col].map(parse_amount).astype(object)
+    df["withdrawal"] = df["withdrawal"].map(lambda v: abs(v) if v is not None else None).astype(object)
+    df = df.astype(object).where(pd.notna(df), None)
+    return df.reset_index(drop=True)
+
+
+def document_to_dataframe(document) -> pd.DataFrame:
+    """Bank Statement Parser entities first; falls back to Form Parser tables."""
+    df = entities_to_dataframe(document)
+    return df if len(df) else tables_to_dataframe(document)
+
+
 def statement_totals(document) -> dict:
     found = {}
     for ent in document.entities:
@@ -467,7 +515,7 @@ def dataframe_to_rows(df: pd.DataFrame) -> list:
 
 def run_statement_pipeline(pdf_bytes: bytes):
     document = process_with_docai(pdf_bytes)
-    return dataframe_to_rows(entities_to_dataframe(document)), statement_totals(document)
+    return dataframe_to_rows(document_to_dataframe(document)), statement_totals(document)
 
 
 # ---------- Document AI end-to-end connection check (sample statement, no pages charged) ----------
@@ -513,11 +561,11 @@ def run_docai_diagnostic() -> dict:
         return {"status": e.status, "steps": steps}
     step("processing", "Processor accepted the sample statement", True,
          f"Processor {name.rsplit('/', 1)[-1]} answered in {docai_settings()['location']}")
-    rows = dataframe_to_rows(entities_to_dataframe(document))
+    rows = dataframe_to_rows(document_to_dataframe(document))
     ok = len(rows) > 0
     step("pipeline", "Transactions extracted", ok,
          f"{len(rows)} transaction(s) extracted from the {len(DIAG_ROWS)}-row sample" if ok
-         else "No transactions came back. Make sure DOCUMENTAI_PROCESSOR_ID is a Bank Statement Parser processor.")
+         else "No transactions came back. Use a Bank Statement Parser or Form Parser processor.")
     return {"status": "ready" if ok else "parse_mismatch", "steps": steps}
 
 
@@ -1017,10 +1065,12 @@ async def google_login(body: GoogleCodeIn, request: Request, response: Response)
     if parsed.path != "/auth/google":
         raise HTTPException(status_code=400, detail="Invalid Google redirect address")
     trusted_origin(f"{parsed.scheme}://{parsed.netloc}", request)
-    client_id = os.environ["GOOGLE_CLIENT_ID"]
+    client_id, client_secret = os.environ.get("GOOGLE_CLIENT_ID"), os.environ.get("GOOGLE_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=503, detail="Google sign-in isn't configured yet")
     async with httpx.AsyncClient(timeout=15) as http:
         r = await http.post(GOOGLE_TOKEN_URL, data={
-            "code": body.code, "client_id": client_id, "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
+            "code": body.code, "client_id": client_id, "client_secret": client_secret,
             "redirect_uri": body.redirect_uri, "grant_type": "authorization_code",
         })
     if r.status_code != 200:

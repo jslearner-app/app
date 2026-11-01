@@ -1,4 +1,4 @@
-# Iteration 9: Textract engine check endpoint (real AWS -> scp_blocked), cooldown, isolation; History kind=variance + review-count
+# Iteration 11: Document AI engine check endpoint (not_configured in preview), cooldown, isolation; History kind=variance + review-count
 import io
 import uuid
 
@@ -15,7 +15,7 @@ def s():
         pytest.skip("login failed")
     sess.headers["X-CSRF-Token"] = r.json()["csrf_token"]
     uid = sess.get(f"{API}/auth/me").json()["user_id"]
-    mdb.textract_checks.delete_many({"user_id": uid})
+    mdb.engine_checks.delete_many({"user_id": uid})
     sess.uid = uid
     yield sess
     mdb.users.update_one({"email": DEMO["email"]}, {"$set": {"pages_used": 0, "plan": "free", "subscription_status": "trial"}})
@@ -31,7 +31,7 @@ def other():
     yield sess
     u = mdb.users.find_one({"email": email})
     if u:
-        mdb.textract_checks.delete_many({"user_id": u["user_id"]})
+        mdb.engine_checks.delete_many({"user_id": u["user_id"]})
         mdb.clients.delete_many({"owner_id": u["user_id"]})
         mdb.user_sessions.delete_many({"user_id": u["user_id"]})
     mdb.users.delete_one({"email": email})
@@ -45,33 +45,34 @@ def client(s):
     mdb.payouts.delete_many({"client_id": c["id"]})
 
 
-# Engine check: scp_blocked with 3 steps, no pages charged, persisted
-def test_engine_check_scp(s):
+# Engine check: not_configured with 1 config step, no pages charged, persisted
+def test_engine_check_not_configured(s):
     before = mdb.users.find_one({"email": DEMO["email"]})["pages_used"]
     r = s.post(f"{API}/statements/engine/check", timeout=90)
     print(r.status_code, r.text)
     assert r.status_code == 200
     d = r.json()
-    assert d["status"] == "scp_blocked"
-    assert [x["id"] for x in d["steps"]] == ["config", "credentials", "textract"]
-    assert [x["ok"] for x in d["steps"]] == [True, True, False]
+    assert d["status"] == "not_configured"
+    assert [x["id"] for x in d["steps"]] == ["config"]
+    assert [x["ok"] for x in d["steps"]] == [False]
+    assert "GOOGLE_APPLICATION_CREDENTIALS_JSON" in d["steps"][0]["detail"]
     assert "checked_at" in d and "user_id" not in d and "_id" not in d
     assert mdb.users.find_one({"email": DEMO["email"]})["pages_used"] == before
-    assert mdb.textract_checks.count_documents({"user_id": s.uid}) == 1
+    assert mdb.engine_checks.count_documents({"user_id": s.uid}) == 1
 
 
 # Cooldown 429
 def test_engine_check_cooldown(s):
     r = s.post(f"{API}/statements/engine/check", timeout=30)
     assert r.status_code == 429 and "30 seconds" in r.json()["detail"]
-    assert mdb.textract_checks.count_documents({"user_id": s.uid}) == 1
+    assert mdb.engine_checks.count_documents({"user_id": s.uid}) == 1
 
 
 # GET engine returns last_check for owner only
 def test_engine_last_check_isolation(s, other):
     d = s.get(f"{API}/statements/engine").json()
-    assert d["engine"] == "aws_textract" and d["configured"] is True
-    assert d["last_check"]["status"] == "scp_blocked" and "user_id" not in d["last_check"]
+    assert d["engine"] == "google_document_ai" and d["configured"] is False
+    assert d["last_check"]["status"] == "not_configured" and "user_id" not in d["last_check"]
     o = other.get(f"{API}/statements/engine").json()
     assert o["last_check"] is None
 

@@ -46,8 +46,9 @@ function App() {
     <div className="App">
       <BrowserRouter>
         <AuthProvider>
-          <AppRouter />
+          {/* Toaster mounts before the routes so toasts fired in a route's first effect (e.g. AuthCallback) aren't lost */}
           <Toaster theme="dark" position="top-right" richColors closeButton />
+          <AppRouter />
         </AuthProvider>
       </BrowserRouter>
     </div>

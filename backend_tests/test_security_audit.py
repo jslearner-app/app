@@ -104,7 +104,7 @@ def test_csrf_exempt_routes_with_cookies(user):
     assert user.post(f"{API}/auth/reset-password", json={"token": "nope", "password": "Abcdefgh1"}).status_code == 400
     assert user.post(f"{API}/webhooks/stripe", data=b"{}", headers={"stripe-signature": "bad"}).status_code == 400
     assert user.post(f"{API}/stripe/webhook", data=b"{}", headers={"stripe-signature": "bad"}).status_code == 400
-    assert user.post(f"{API}/webhooks/textract", data=b"{}", headers={"X-LedgerStream-Signature": "bad"}).status_code == 401
+    assert user.post(f"{API}/webhooks/textract", data=b"{}", headers={"X-LedgerStream-Signature": "bad"}).status_code in (404, 405)
     r = user.post(f"{API}/auth/login", json={"email": user.email, "password": "TestPass#2026"})
     assert r.status_code == 200
     user.csrf = r.json()["csrf_token"]  # new refresh cookie -> new csrf token

@@ -175,12 +175,12 @@ def test_payout_errors(demo, demo_client):
 # ---------- Statements ----------
 def test_statement_engine_and_validation(demo, demo_client):
     e = demo.get(f"{API}/statements/engine").json()
-    assert e["engine"] == "aws_textract"
+    assert e["engine"] == "google_document_ai" and e["configured"] is False
     r = demo.post(f"{API}/statements", data={"client_id": demo_client["id"]}, files={"file": ("a.txt", b"x", "text/plain")})
     assert r.status_code == 400
 
 
-def test_statement_textract_failure_not_charged(demo, demo_client):
+def test_statement_docai_not_configured_not_charged(demo, demo_client):
     mdb.users.update_one({"email": DEMO["email"]}, {"$set": {"pages_used": 0}})
     r = demo.post(f"{API}/statements", data={"client_id": demo_client["id"]},
                   files={"file": ("TEST_stmt.pdf", blank_pdf(1), "application/pdf")}, timeout=90)
@@ -201,7 +201,10 @@ def test_statement_page_cap_402(demo, demo_client):
     try:
         r = demo.post(f"{API}/statements", data={"client_id": demo_client["id"]},
                       files={"file": ("TEST_big.pdf", blank_pdf(2), "application/pdf")})
-        assert r.status_code == 402 and "Free trial limit" in r.json()["detail"]
+        if r.status_code == 503:  # Document AI not configured: 503 is returned before page reservation
+            assert "Google Document AI is not connected yet" in r.json()["detail"]
+        else:
+            assert r.status_code == 402 and "Free trial limit" in r.json()["detail"]
         assert mdb.users.find_one({"email": DEMO["email"]})["pages_used"] == 4
     finally:
         mdb.users.update_one({"email": DEMO["email"]}, {"$set": {"pages_used": 0}})
@@ -244,7 +247,7 @@ def test_unauth_and_webhooks():
     for path in ["/clients", "/history", "/dashboard/summary", "/billing/summary", "/auth/me"]:
         assert requests.get(f"{API}{path}").status_code == 401
     assert requests.post(f"{API}/webhooks/stripe", data=b"{}", headers={"stripe-signature": "bad"}).status_code == 400
-    assert requests.post(f"{API}/webhooks/textract", data=b"{}", headers={"X-LedgerStream-Signature": "bad"}).status_code == 401
+    assert requests.post(f"{API}/webhooks/textract", data=b"{}", headers={"X-LedgerStream-Signature": "bad"}).status_code in (404, 405)
 
 
 def test_contact_validation(demo):
