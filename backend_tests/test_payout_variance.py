@@ -95,11 +95,7 @@ def test_other_platforms(s, client, platform):
         assert v["flagged"] == (v["difference"] != 0)
 
 
-# Document AI not configured: 503, not charged
-def test_docai_not_configured_503(s, client):
-    before = mdb.users.find_one({"email": DEMO["email"]})["pages_used"]
-    r = s.post(f"{API}/statements", data={"client_id": client["id"]},
-               files={"file": ("TEST_s.pdf", io.BytesIO(blank_pdf(1)), "application/pdf")}, timeout=90)
-    assert r.status_code == 503
-    assert r.json()["detail"].startswith("Google Document AI is not connected yet")
-    assert mdb.users.find_one({"email": DEMO["email"]})["pages_used"] == before
+# Document AI configured: engine reports configured=true (no billed upload here; live upload is in test_docai_live.py)
+def test_docai_configured(s):
+    e = s.get(f"{API}/statements/engine").json()
+    assert e["configured"] is True and e["region"] == "eu"

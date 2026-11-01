@@ -7,10 +7,10 @@ def _google(redirect_uri, code="fake_code"):
     return requests.post(f"{API}/auth/google", json={"code": code, "redirect_uri": redirect_uri}, timeout=30)
 
 
-# Health reports the parser as not configured
-def test_health_parser_not_configured():
+# Health reports the parser as configured (real Document AI keys set)
+def test_health_parser_configured():
     r = requests.get(f"{API}/health")
-    assert r.status_code == 200 and r.json() == {"status": "ok", "parser_configured": False}
+    assert r.status_code == 200 and r.json() == {"status": "ok", "parser_configured": True}
 
 
 # Untrusted origin in redirect_uri -> 400
@@ -38,13 +38,11 @@ def test_google_validation():
     assert requests.post(f"{API}/auth/google", json={"code": "", "redirect_uri": f"{BASE_URL}/auth/google"}).status_code == 422
 
 
-# Trusted origin + fake code: expected 401; without GOOGLE_CLIENT_ID configured this is 500 (KeyError) -> reported
+# Trusted origin + fake code: Google rejects the code -> 401 (own OAuth keys are set)
 def test_google_trusted_fake_code():
     r = _google(f"{BASE_URL}/auth/google")
     print("google trusted fake code:", r.status_code, r.text[:200])
-    assert r.status_code in (401, 500)
-    if r.status_code == 401:
-        assert "Google sign-in failed" in r.json()["detail"]
+    assert r.status_code == 401 and "Google sign-in failed" in r.json()["detail"]
 
 
 # Old Emergent and Textract endpoints are gone

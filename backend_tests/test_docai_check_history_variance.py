@@ -1,4 +1,4 @@
-# Iteration 11: Document AI engine check endpoint (not_configured in preview), cooldown, isolation; History kind=variance + review-count
+# Iteration 12: Document AI engine check (configured, unbilled cooldown via seeded check), isolation; History kind=variance + review-count
 import io
 import uuid
 
@@ -45,36 +45,27 @@ def client(s):
     mdb.payouts.delete_many({"client_id": c["id"]})
 
 
-# Engine check: not_configured with 1 config step, no pages charged, persisted
-def test_engine_check_not_configured(s):
-    before = mdb.users.find_one({"email": DEMO["email"]})["pages_used"]
-    r = s.post(f"{API}/statements/engine/check", timeout=90)
-    print(r.status_code, r.text)
-    assert r.status_code == 200
-    d = r.json()
-    assert d["status"] == "not_configured"
-    assert [x["id"] for x in d["steps"]] == ["config"]
-    assert [x["ok"] for x in d["steps"]] == [False]
-    assert "GOOGLE_APPLICATION_CREDENTIALS_JSON" in d["steps"][0]["detail"]
-    assert "checked_at" in d and "user_id" not in d and "_id" not in d
-    assert mdb.users.find_one({"email": DEMO["email"]})["pages_used"] == before
-    assert mdb.engine_checks.count_documents({"user_id": s.uid}) == 1
-
-
-# Cooldown 429
+# Engine check cooldown (no billed call): a check stored <30s ago -> 429, nothing new stored
 def test_engine_check_cooldown(s):
-    r = s.post(f"{API}/statements/engine/check", timeout=30)
-    assert r.status_code == 429 and "30 seconds" in r.json()["detail"]
-    assert mdb.engine_checks.count_documents({"user_id": s.uid}) == 1
+    from datetime import datetime, timezone
+    mdb.engine_checks.delete_many({"user_id": s.uid})
+    mdb.engine_checks.insert_one({"user_id": s.uid, "status": "ready", "steps": [], "checked_at": datetime.now(timezone.utc).isoformat()})
+    try:
+        r = s.post(f"{API}/statements/engine/check", timeout=30)
+        assert r.status_code == 429 and "30 seconds" in r.json()["detail"]
+        assert mdb.engine_checks.count_documents({"user_id": s.uid}) == 1
+        # GET engine: configured (real keys), eu region, last_check for owner only
+        d = s.get(f"{API}/statements/engine").json()
+        assert d["engine"] == "google_document_ai" and d["configured"] is True and d["region"] == "eu"
+        assert d["last_check"]["status"] == "ready" and "user_id" not in d["last_check"] and "_id" not in d["last_check"]
+    finally:
+        mdb.engine_checks.delete_many({"user_id": s.uid})
 
 
-# GET engine returns last_check for owner only
-def test_engine_last_check_isolation(s, other):
-    d = s.get(f"{API}/statements/engine").json()
-    assert d["engine"] == "google_document_ai" and d["configured"] is False
-    assert d["last_check"]["status"] == "not_configured" and "user_id" not in d["last_check"]
+# Isolation: another user's last_check is None
+def test_engine_last_check_isolation(other):
     o = other.get(f"{API}/statements/engine").json()
-    assert o["last_check"] is None
+    assert o["configured"] is True and o["last_check"] is None
 
 
 # Unauth

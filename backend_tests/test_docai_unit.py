@@ -24,8 +24,8 @@ def item(**props):
     return NS(type_="table_item", mention_text="raw text", properties=[prop(k, v) for k, v in props.items()])
 
 
-def doc(entities):
-    return NS(entities=entities)
+def doc(entities, pages=None, text=""):
+    return NS(entities=entities, pages=pages or [], text=text)
 
 
 SAMPLE = doc([
@@ -144,3 +144,30 @@ def test_page_cap_15_in_process(monkeypatch):
         mdb.statements.delete_many({"owner_id": uid})
         mdb.clients.delete_many({"owner_id": uid})
         mdb.users.delete_one({"user_id": uid})
+
+
+# Form Parser fallback: tables_to_dataframe maps header -> ledger columns, parses amounts, skips dateless rows
+def _form_doc(table_rows):
+    text, rows = "", []
+    for r in table_rows:
+        cells = []
+        for c in r:
+            seg = NS(start_index=len(text), end_index=len(text) + len(c))
+            text += c
+            cells.append(NS(layout=NS(text_anchor=NS(text_segments=[seg]))))
+        rows.append(NS(cells=cells))
+    table = NS(header_rows=rows[:1], body_rows=rows[1:])
+    return doc([], pages=[NS(tables=[table])], text=text)
+
+
+def test_form_parser_fallback():
+    d = _form_doc([["Date", "Description", "Reference", "Withdrawals", "Deposits", "Balance"],
+                   ["09/01/2026", "Opening deposit", "", "", "1,000.00", "1,000.00"],
+                   ["09/02/2026", "Office supplies", "1001", "(150.25)", "", "849.75"],
+                   ["", "Page total", "", "", "", ""]])
+    rows = lf.dataframe_to_rows(lf.document_to_dataframe(d))
+    assert len(rows) == 2
+    assert rows[0]["deposit"] == 1000.0 and rows[0]["withdrawal"] is None and rows[0]["balance"] == 1000.0
+    assert rows[1]["withdrawal"] == 150.25 and rows[1]["reference"] == "1001" and rows[1]["deposit"] is None
+    # table without a Date/Description header is ignored
+    assert len(lf.document_to_dataframe(_form_doc([["Foo", "Bar"], ["1", "2"]]))) == 0
