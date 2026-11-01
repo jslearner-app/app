@@ -17,20 +17,24 @@ from typing import List, Literal, Optional
 from urllib.parse import urlparse
 
 import bcrypt
-import boto3
 import httpx
 import jwt
 import pandas as pd
 import stripe
-from botocore.config import Config
-from botocore.exceptions import BotoCoreError, ClientError
+from google.api_core import exceptions as gexc
+from google.api_core.client_options import ClientOptions
+from google.auth.exceptions import GoogleAuthError
+from google.auth.transport import requests as google_requests
+from google.cloud import documentai_v1 as documentai
+from google.oauth2 import id_token as google_id_token
+from google.oauth2 import service_account
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from mangum import Mangum
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfReader
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
@@ -45,7 +49,7 @@ logger = logging.getLogger("ledgerstream")
 # Configuration & database (DATABASE_URL = MongoDB connection string)
 # =====================================================================
 def _connect_database():
-    mongo = AsyncIOMotorClient(os.environ["DATABASE_URL"])
+    mongo = AsyncIOMotorClient(os.environ.get("DATABASE_URL") or os.environ["MONGO_URL"])
     return mongo, mongo.get_default_database(os.environ.get("DB_NAME"))
 
 
@@ -65,6 +69,8 @@ STRIPE_WEBHOOK_SECRET = os.environ["STRIPE_WEBHOOK_SECRET"]
 STRIPE_TAX_MODE = "full"
 PLAN_LOOKUP = {"starter": "starter_monthly", "agency": "agency_monthly"}
 
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+EMAIL_BASE_URL = "https://integrations.emergentagent.com"
 EMERGENT_SESSION_URL = os.environ.get("GOOGLE_SESSION_URL", "https://googleapis.com")
 EMAIL_BASE_URL = os.environ.get("NEXT_PUBLIC_SITE_URL", "https://ledgerstreamai.com")
 
@@ -106,13 +112,13 @@ def _jwt_secret() -> str:
 
 
 def create_access_token(user_id: str, email: str) -> str:
-    payload = {"sub": user_id, "email": email, "iat": int(now().timestamp()),
+    payload = {"sub": user_id, "email": email, "iat": now().timestamp(),
                "exp": now() + timedelta(minutes=15), "type": "access"}
     return jwt.encode(payload, _jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
 def create_refresh_token(user_id: str) -> str:
-    payload = {"sub": user_id, "iat": int(now().timestamp()), "exp": now() + timedelta(days=7), "type": "refresh"}
+    payload = {"sub": user_id, "iat": now().timestamp(), "exp": now() + timedelta(days=7), "type": "refresh"}
     return jwt.encode(payload, _jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
@@ -131,8 +137,8 @@ def set_auth_cookies(response, user_id: str, email: str) -> str:
 
 
 # ---------- CSRF: token = HMAC of the long-lived session cookie, sent back in X-CSRF-Token ----------
-CSRF_COOKIES = ("refresh_token", "session_token")
-CSRF_EXEMPT_PATHS = {"/api/auth/login", "/api/auth/register", "/api/auth/google/session", "/api/auth/forgot-password",
+CSRF_COOKIES = ("refresh_token",)
+CSRF_EXEMPT_PATHS = {"/api/auth/login", "/api/auth/register", "/api/auth/google", "/api/auth/forgot-password",
                      "/api/auth/reset-password", "/api/auth/refresh", "/api/auth/logout", "/api/stripe/webhook"}
 CSRF_EXEMPT_PREFIXES = ("/api/webhooks/",)
 
@@ -156,9 +162,12 @@ def csrf_valid(request: Request) -> bool:
 
 
 def client_ip(request: Request) -> str:
-    """Last X-Forwarded-For hop is appended by our proxy; earlier entries are client-controlled."""
-    forwarded = request.headers.get("x-forwarded-for", "").split(",")[-1].strip()
-    return forwarded or (request.client.host if request.client else "unknown")
+    """Real client = entry added by the outermost trusted proxy (TRUSTED_PROXY_HOPS); earlier entries are spoofable."""
+    hops = int(os.environ.get("TRUSTED_PROXY_HOPS", "0"))
+    entries = [e.strip() for e in request.headers.get("x-forwarded-for", "").split(",") if e.strip()]
+    if hops and len(entries) >= hops:
+        return entries[-hops]
+    return request.client.host if request.client else "unknown"
 
 
 async def throttle(request: Request, scope: str, limit: int, window_minutes: int = 60):
@@ -185,17 +194,10 @@ def _as_utc(dt):
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-async def _user_from_session(token: str):
-    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
-    if not session or _as_utc(session["expires_at"]) < now():
-        return None
-    return await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0, "password_hash": 0})
-
-
 def token_revoked(user: dict, payload: dict) -> bool:
     """Tokens issued before the last password reset are no longer accepted."""
     changed = user.get("password_changed_at")
-    return bool(changed) and payload.get("iat", 0) < int(_as_utc(changed).timestamp())
+    return bool(changed) and payload.get("iat", 0) < _as_utc(changed).timestamp()
 
 
 async def _user_from_jwt(token: str):
@@ -210,13 +212,8 @@ async def _user_from_jwt(token: str):
 async def get_current_user(request: Request) -> dict:
     bearer = request.headers.get("Authorization", "")
     bearer = bearer[7:] if bearer.startswith("Bearer ") else None
-    user = None
     access = request.cookies.get("access_token") or bearer
-    if access:
-        user = await _user_from_jwt(access)
-    session = request.cookies.get("session_token") or bearer
-    if not user and session:
-        user = await _user_from_session(session)
+    user = await _user_from_jwt(access) if access else None
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return user
@@ -312,7 +309,7 @@ def public_user(u: dict) -> dict:
 
 
 # =====================================================================
-# Bank statement pipeline: PDF -> AWS Textract (TABLES) -> Pandas -> rows
+# Bank statement pipeline: PDF -> Google Document AI (Bank Statement Parser) -> Pandas -> rows
 # =====================================================================
 STATEMENT_COLUMNS = ["date", "description", "reference", "withdrawal", "deposit", "balance"]
 EXPORT_HEADERS = ["Date", "Description", "Reference/Check #", "Withdrawals", "Deposits", "Balance"]
@@ -327,85 +324,92 @@ COLUMN_KEYWORDS = [
 ]
 
 
-class TextractNotConfigured(Exception):
+DOCAI_MAX_PAGES = 15
+
+
+class DocumentAINotConfigured(Exception):
     pass
 
 
-class TextractError(Exception):
-    pass
+class DocumentAIError(Exception):
+    def __init__(self, status: str, message: str):
+        super().__init__(message)
+        self.status = status
 
 
 def count_pages(pdf_bytes: bytes) -> int:
     return len(PdfReader(io.BytesIO(pdf_bytes)).pages)
 
 
-def textract_config() -> dict:
+def docai_settings() -> dict:
     return {
-        "aws_access_key_id": os.environ.get("AWS_ACCESS_KEY_ID", ""),
-        "aws_secret_access_key": os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
-        "region_name": os.environ.get("AWS_REGION", ""),
+        "credentials_json": os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON", ""),
+        "location": os.environ.get("DOCUMENTAI_LOCATION", ""),
+        "processor_id": os.environ.get("DOCUMENTAI_PROCESSOR_ID", ""),
     }
 
 
-def textract_enabled() -> bool:
-    values = textract_config().values()
-    return all(values) and not any(v.startswith("AWS_PLACEHOLDER") for v in values)
+def docai_enabled() -> bool:
+    return all(docai_settings().values())
 
 
-def textract_client():
-    if not textract_enabled():
-        raise TextractNotConfigured("AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_REGION must be set")
-    return boto3.client("textract", config=Config(retries={"max_attempts": 4, "mode": "standard"}), **textract_config())
+_docai_cache = {}
 
 
-def _split_pages(pdf_bytes: bytes):
-    """Synchronous AnalyzeDocument accepts single-page PDFs, so each page is sent on its own."""
-    for page in PdfReader(io.BytesIO(pdf_bytes)).pages:
-        writer = PdfWriter()
-        writer.add_page(page)
-        buf = io.BytesIO()
-        writer.write(buf)
-        yield buf.getvalue()
-
-
-def analyze_with_textract(pdf_bytes: bytes) -> list:
-    textract = textract_client()
-    blocks = []
-    for page_no, page_bytes in enumerate(_split_pages(pdf_bytes), start=1):
+def docai_client():
+    """Returns (client, processor_name, service_account_email); cached for warm Lambda reuse."""
+    cfg = docai_settings()
+    if not all(cfg.values()):
+        raise DocumentAINotConfigured(
+            "Google Document AI is not connected yet. Add GOOGLE_APPLICATION_CREDENTIALS_JSON, DOCUMENTAI_LOCATION "
+            "and DOCUMENTAI_PROCESSOR_ID to enable PDF parsing")
+    key = tuple(cfg.values())
+    if key not in _docai_cache:
         try:
-            resp = textract.analyze_document(Document={"Bytes": page_bytes}, FeatureTypes=["TABLES"])
-        except ClientError as e:
-            err = e.response.get("Error", {})
-            if "service control policy" in (err.get("Message") or ""):
-                raise TextractError(
-                    "Amazon Textract is blocked by your AWS Organization: a service control policy explicitly denies "
-                    "textract:AnalyzeDocument for this AWS user. An administrator of the AWS management account must "
-                    "remove that deny (or move this account out of the policy) before statements can be converted")
-            raise TextractError(f"Textract rejected page {page_no}: {err.get('Code')} - {err.get('Message')}")
-        except BotoCoreError as e:
-            raise TextractError(f"Could not reach Amazon Textract: {e}")
-        for block in resp["Blocks"]:
-            block["Page"] = page_no
-            blocks.append(block)
-    return blocks
+            info = json.loads(cfg["credentials_json"])
+            creds = service_account.Credentials.from_service_account_info(
+                info, scopes=["https://www.googleapis.com/auth/cloud-platform"])
+            project = os.environ.get("DOCUMENTAI_PROJECT_ID") or info["project_id"]
+        except (ValueError, KeyError, TypeError):
+            raise DocumentAIError("invalid_credentials",
+                                  "GOOGLE_APPLICATION_CREDENTIALS_JSON is not a valid service account key (JSON)")
+        client = documentai.DocumentProcessorServiceClient(
+            credentials=creds, client_options=ClientOptions(api_endpoint=f"{cfg['location']}-documentai.googleapis.com"))
+        _docai_cache.clear()
+        _docai_cache[key] = (client, client.processor_path(project, cfg["location"], cfg["processor_id"]),
+                             info.get("client_email", ""))
+    return _docai_cache[key]
 
 
-def _child_ids(block: dict):
-    for rel in block.get("Relationships", []) or []:
-        if rel.get("Type") == "CHILD":
-            yield from rel.get("Ids", [])
+def docai_failure(e: Exception):
+    if isinstance(e, gexc.PermissionDenied):
+        return "permission_denied", ("The service account can't use this processor. Enable the Document AI API and grant "
+                                      "the service account the Document AI API User role.")
+    if isinstance(e, gexc.NotFound):
+        return "processor_not_found", "Processor not found. Check DOCUMENTAI_PROCESSOR_ID and DOCUMENTAI_LOCATION (us or eu)."
+    if isinstance(e, (gexc.Unauthenticated, GoogleAuthError)):
+        return "invalid_credentials", "Google rejected the service account key. Create a new JSON key and save it again."
+    if isinstance(e, (gexc.ServiceUnavailable, gexc.DeadlineExceeded, gexc.RetryError)):
+        return "unreachable", "Could not reach Google Document AI. Try again in a moment."
+    return "docai_error", f"Google Document AI rejected the document: {getattr(e, 'message', None) or e}"
 
 
-def _map_columns(headers) -> dict:
-    mapping, used = {}, set()
-    for header in headers:
-        h = str(header).strip().lower()
-        for canonical, keywords in COLUMN_KEYWORDS:
-            if canonical not in used and any(k in h for k in keywords):
-                mapping[header] = canonical
-                used.add(canonical)
-                break
-    return mapping
+def process_with_docai(pdf_bytes: bytes):
+    client, name, _ = docai_client()
+    try:
+        result = client.process_document(request=documentai.ProcessRequest(
+            name=name, raw_document=documentai.RawDocument(content=pdf_bytes, mime_type="application/pdf")), timeout=120)
+    except (gexc.GoogleAPICallError, gexc.RetryError, GoogleAuthError) as e:
+        raise DocumentAIError(*docai_failure(e))
+    return result.document
+
+
+def _prop_text(props: dict, *names):
+    for n in names:
+        p = props.get(n)
+        if p is not None and (p.mention_text or "").strip():
+            return " ".join(p.mention_text.split())
+    return None
 
 
 def parse_amount(value):
@@ -423,40 +427,83 @@ def parse_amount(value):
     return float(-amount if negative else amount)
 
 
-def blocks_to_dataframe(blocks: list) -> pd.DataFrame:
-    by_id = {b["Id"]: b for b in blocks if "Id" in b}
-    frames = []
-    for table in (b for b in blocks if b.get("BlockType") == "TABLE"):
-        grid = {}
-        for cid in _child_ids(table):
-            cell = by_id.get(cid)
-            if not cell or cell.get("BlockType") != "CELL":
+def entities_to_dataframe(document) -> pd.DataFrame:
+    """Maps Bank Statement Parser table_item entities onto the ledger columns."""
+    records = []
+    for ent in document.entities:
+        if ent.type_ != "table_item":
+            continue
+        props = {p.type_: p for p in ent.properties}
+        withdrawal = parse_amount(_prop_text(props, "transaction_withdrawal"))
+        records.append({
+            "date": _prop_text(props, "transaction_deposit_date", "transaction_withdrawal_date") or "",
+            "description": _prop_text(props, "transaction_deposit_description", "transaction_withdrawal_description")
+            or " ".join((ent.mention_text or "").split()),
+            "reference": _prop_text(props, "reference_number", "check_number", "transaction_reference") or "",
+            "withdrawal": abs(withdrawal) if withdrawal is not None else None,
+            "deposit": parse_amount(_prop_text(props, "transaction_deposit")),
+            "balance": parse_amount(_prop_text(props, "balance", "ending_daily_balance", "transaction_balance")),
+        })
+    df = pd.DataFrame(records, columns=STATEMENT_COLUMNS)
+    df = df[df["date"].astype(str).str.strip() != ""]
+    df = df.astype(object).where(pd.notna(df), None)
+    return df.reset_index(drop=True)
+
+
+def _layout_text(document, layout) -> str:
+    segments = layout.text_anchor.text_segments
+    return " ".join("".join(document.text[int(s.start_index):int(s.end_index)] for s in segments).split())
+
+
+def _map_columns(headers: list) -> dict:
+    """Maps header cell index -> canonical ledger column using COLUMN_KEYWORDS."""
+    mapping, used = {}, set()
+    for idx, header in enumerate(headers):
+        h = header.lower()
+        for canonical, keywords in COLUMN_KEYWORDS:
+            if canonical not in used and any(k in h for k in keywords):
+                mapping[idx] = canonical
+                used.add(canonical)
+                break
+    return mapping
+
+
+def tables_to_dataframe(document) -> pd.DataFrame:
+    """Form Parser fallback: reads detected tables whose header has at least Date + Description columns."""
+    records = []
+    for page in document.pages:
+        for table in page.tables:
+            rows = [*table.header_rows, *table.body_rows]
+            texts = [[_layout_text(document, c.layout) for c in r.cells] for r in rows]
+            header_idx = next((i for i, t in enumerate(texts)
+                               if {"date", "description"} <= set(_map_columns(t).values())), None)
+            if header_idx is None:
                 continue
-            words = [by_id[w]["Text"] for w in _child_ids(cell) if by_id.get(w, {}).get("BlockType") == "WORD"]
-            grid[(cell["RowIndex"], cell["ColumnIndex"])] = " ".join(words)
-        if not grid:
-            continue
-        n_rows = max(r for r, _ in grid)
-        n_cols = max(c for _, c in grid)
-        matrix = [[grid.get((r, c), "") for c in range(1, n_cols + 1)] for r in range(1, n_rows + 1)]
-        df = pd.DataFrame(matrix[1:], columns=matrix[0])
-        mapping = _map_columns(df.columns)
-        if "date" not in mapping.values() or "description" not in mapping.values():
-            continue
-        frames.append(df[list(mapping.keys())].rename(columns=mapping))
-    if not frames:
-        return pd.DataFrame(columns=STATEMENT_COLUMNS)
-    df = pd.concat(frames, ignore_index=True)
-    for col in STATEMENT_COLUMNS:
-        if col not in df.columns:
-            df[col] = ""
-    df = df[STATEMENT_COLUMNS]
+            mapping = _map_columns(texts[header_idx])
+            for cells in texts[header_idx + 1:]:
+                records.append({canon: cells[i] if i < len(cells) else "" for i, canon in mapping.items()})
+    df = pd.DataFrame(records, columns=STATEMENT_COLUMNS).fillna("")
     df["date"] = df["date"].astype(str).str.strip()
     df = df[df["date"] != ""]
     for col in AMOUNT_COLUMNS:
         df[col] = df[col].map(parse_amount).astype(object)
+    df["withdrawal"] = df["withdrawal"].map(lambda v: abs(v) if v is not None else None).astype(object)
     df = df.astype(object).where(pd.notna(df), None)
     return df.reset_index(drop=True)
+
+
+def document_to_dataframe(document) -> pd.DataFrame:
+    """Bank Statement Parser entities first; falls back to Form Parser tables."""
+    df = entities_to_dataframe(document)
+    return df if len(df) else tables_to_dataframe(document)
+
+
+def statement_totals(document) -> dict:
+    found = {}
+    for ent in document.entities:
+        if ent.type_ in ("starting_balance", "ending_balance") and ent.type_ not in found:
+            found[ent.type_] = parse_amount(ent.mention_text)
+    return {"starting_balance": found.get("starting_balance"), "ending_balance": found.get("ending_balance")}
 
 
 def dataframe_to_rows(df: pd.DataFrame) -> list:
@@ -469,11 +516,12 @@ def dataframe_to_rows(df: pd.DataFrame) -> list:
     return rows
 
 
-def run_statement_pipeline(pdf_bytes: bytes) -> list:
-    return dataframe_to_rows(blocks_to_dataframe(analyze_with_textract(pdf_bytes)))
+def run_statement_pipeline(pdf_bytes: bytes):
+    document = process_with_docai(pdf_bytes)
+    return dataframe_to_rows(document_to_dataframe(document)), statement_totals(document)
 
 
-# ---------- Textract end-to-end connection check (sample statement, no pages charged) ----------
+# ---------- Document AI end-to-end connection check (sample statement, no pages charged) ----------
 DIAG_HEADER = ["Date", "Description", "Reference", "Withdrawals", "Deposits", "Balance"]
 DIAG_ROWS = [
     ["09/01/2026", "Opening deposit", "", "", "1,000.00", "1,000.00"],
@@ -492,56 +540,35 @@ def build_sample_statement_pdf() -> bytes:
     return buf.getvalue()
 
 
-def _textract_failure(e: ClientError):
-    err = e.response.get("Error", {})
-    code, msg = err.get("Code", ""), err.get("Message", "")
-    if "service control policy" in msg:
-        return "scp_blocked", ("Your AWS Organization's service control policy explicitly denies textract:AnalyzeDocument. "
-                                "An administrator of the AWS management account must remove that deny.")
-    if code == "AccessDeniedException":
-        return "iam_denied", ("This AWS user has no permission for textract:AnalyzeDocument. Attach the "
-                               "AmazonTextractFullAccess policy or allow textract:AnalyzeDocument.")
-    if code in ("UnrecognizedClientException", "InvalidSignatureException"):
-        return "invalid_keys", "AWS rejected these keys. Check the access key ID and secret."
-    if code == "SubscriptionRequiredException":
-        return "not_subscribed", "Amazon Textract isn't enabled for this AWS account yet."
-    return "textract_error", f"{code}: {msg}"
-
-
-def run_textract_diagnostic() -> dict:
+def run_docai_diagnostic() -> dict:
     steps = []
 
     def step(key, label, ok, detail):
         steps.append({"id": key, "label": label, "ok": ok, "detail": detail})
 
-    configured = textract_enabled()
-    step("config", "AWS keys configured", configured, "Access key, secret and region are set" if configured
-         else "Add AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_REGION")
+    configured = docai_enabled()
+    step("config", "Document AI settings saved", configured, "Service account key, location and processor ID are set"
+         if configured else "Add GOOGLE_APPLICATION_CREDENTIALS_JSON, DOCUMENTAI_LOCATION and DOCUMENTAI_PROCESSOR_ID")
     if not configured:
         return {"status": "not_configured", "steps": steps}
-    cfg = textract_config()
     try:
-        arn = boto3.client("sts", **cfg).get_caller_identity()["Arn"]
-        step("credentials", "AWS credentials valid", True, f"Signed in as {arn.split(':')[-1].split('/')[-1]}")
-    except (ClientError, BotoCoreError):
-        step("credentials", "AWS credentials valid", False, "AWS rejected these keys. Check the access key ID and secret.")
-        return {"status": "invalid_keys", "steps": steps}
+        _, name, email = docai_client()
+        step("credentials", "Service account key valid", True, f"Using {email or 'service account'}")
+    except DocumentAIError as e:
+        step("credentials", "Service account key valid", False, str(e))
+        return {"status": e.status, "steps": steps}
     try:
-        blocks = textract_client().analyze_document(
-            Document={"Bytes": build_sample_statement_pdf()}, FeatureTypes=["TABLES"])["Blocks"]
-    except ClientError as e:
-        status, detail = _textract_failure(e)
-        step("textract", "Textract access allowed", False, detail)
-        return {"status": status, "steps": steps}
-    except BotoCoreError as e:
-        step("textract", "Textract access allowed", False, f"Could not reach Amazon Textract in {cfg['region_name']}: {e}")
-        return {"status": "unreachable", "steps": steps}
-    step("textract", "Textract access allowed", True, f"Amazon Textract answered in {cfg['region_name']}")
-    rows = dataframe_to_rows(blocks_to_dataframe(blocks))
-    rec = reconcile(rows)
-    ok = len(rows) == len(DIAG_ROWS) and rec["status"] == "reconciled"
-    step("pipeline", "Sample statement parsed and reconciled", ok,
-         f"{len(rows)} of {len(DIAG_ROWS)} transactions extracted, reconciliation: {rec['status']}")
+        document = process_with_docai(build_sample_statement_pdf())
+    except DocumentAIError as e:
+        step("processing", "Processor accepted the sample statement", False, str(e))
+        return {"status": e.status, "steps": steps}
+    step("processing", "Processor accepted the sample statement", True,
+         f"Processor {name.rsplit('/', 1)[-1]} answered in {docai_settings()['location']}")
+    rows = dataframe_to_rows(document_to_dataframe(document))
+    ok = len(rows) > 0
+    step("pipeline", "Transactions extracted", ok,
+         f"{len(rows)} transaction(s) extracted from the {len(DIAG_ROWS)}-row sample" if ok
+         else "No transactions came back. Use a Bank Statement Parser or Form Parser processor.")
     return {"status": "ready" if ok else "parse_mismatch", "steps": steps}
 
 
@@ -571,10 +598,26 @@ def _row_net(row) -> Decimal:
         d2(row["withdrawal"]) if row.get("withdrawal") is not None else Decimal("0"))
 
 
-def reconcile(rows: list) -> dict:
+def _reconcile_totals(rows: list, totals: dict) -> dict:
+    """Statement-level check when no running balances exist: starting balance + net activity vs ending balance."""
+    opening, reported = d2(totals["starting_balance"]), d2(totals["ending_balance"])
+    computed = opening + sum((_row_net(r) for r in rows), Decimal("0"))
+    return {
+        "status": "mismatch" if computed != reported else "reconciled",
+        "opening_balance": float(opening),
+        "computed_closing": float(computed),
+        "reported_closing": float(reported),
+        "difference": float(reported - computed),
+        "mismatched_rows": [],
+    }
+
+
+def reconcile(rows: list, totals: Optional[dict] = None) -> dict:
     """Checks opening balance + deposits - withdrawals against each printed running balance and the closing balance."""
     first = next((i for i, r in enumerate(rows) if r.get("balance") is not None), None)
     if first is None:
+        if totals and totals.get("starting_balance") is not None and totals.get("ending_balance") is not None:
+            return _reconcile_totals(rows, totals)
         return {"status": "unavailable", "message": "No running balance column was found on this statement."}
     opening = d2(rows[first]["balance"]) - _row_net(rows[first])
     for r in rows[:first]:
@@ -602,7 +645,7 @@ def reconcile(rows: list) -> dict:
     }
 
 
-def summarize(rows: list) -> dict:
+def summarize(rows: list, totals: Optional[dict] = None) -> dict:
     withdrawals = sum((d2(r["withdrawal"]) for r in rows if r.get("withdrawal") is not None), Decimal("0"))
     deposits = sum((d2(r["deposit"]) for r in rows if r.get("deposit") is not None), Decimal("0"))
     balances = [r["balance"] for r in rows if r.get("balance") is not None]
@@ -610,8 +653,8 @@ def summarize(rows: list) -> dict:
         "transactions": len(rows),
         "total_withdrawals": float(withdrawals),
         "total_deposits": float(deposits),
-        "closing_balance": balances[-1] if balances else None,
-        "reconciliation": reconcile(rows),
+        "closing_balance": balances[-1] if balances else (totals or {}).get("ending_balance"),
+        "reconciliation": reconcile(rows, totals),
     }
 
 
@@ -895,8 +938,9 @@ class LoginIn(BaseModel):
     password: str
 
 
-class GoogleSessionIn(BaseModel):
-    session_id: str
+class GoogleCodeIn(BaseModel):
+    code: str = Field(min_length=1, max_length=2048)
+    redirect_uri: str = Field(min_length=1, max_length=500)
 
 
 class ForgotIn(BaseModel):
@@ -968,7 +1012,7 @@ async def root():
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "textract_configured": textract_enabled()}
+    return {"status": "ok", "parser_configured": docai_enabled()}
 
 
 # ---------- Auth ----------
@@ -1016,28 +1060,44 @@ async def login(body: LoginIn, request: Request, response: Response):
     return {**public_user(user), "csrf_token": csrf_token_for(refresh_token)}
 
 
-@app.post("/api/auth/google/session")
-async def google_session(body: GoogleSessionIn, response: Response):
+@app.post("/api/auth/google")
+async def google_login(body: GoogleCodeIn, request: Request, response: Response):
+    """Standard Google OAuth 2.0 code exchange; redirect_uri must be <trusted frontend>/auth/google."""
+    await throttle(request, "google", 60)
+    parsed = urlparse(body.redirect_uri)
+    if parsed.path != "/auth/google":
+        raise HTTPException(status_code=400, detail="Invalid Google redirect address")
+    trusted_origin(f"{parsed.scheme}://{parsed.netloc}", request)
+    client_id, client_secret = os.environ.get("GOOGLE_CLIENT_ID"), os.environ.get("GOOGLE_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=503, detail="Google sign-in isn't configured yet")
     async with httpx.AsyncClient(timeout=15) as http:
-        r = await http.get(EMERGENT_SESSION_URL, headers={"X-Session-ID": body.session_id})
+        r = await http.post(GOOGLE_TOKEN_URL, data={
+            "code": body.code, "client_id": client_id, "client_secret": client_secret,
+            "redirect_uri": body.redirect_uri, "grant_type": "authorization_code",
+        })
     if r.status_code != 200:
-        raise HTTPException(status_code=401, detail="Google sign-in failed")
-    data = r.json()
-    email = data["email"].lower()
+        logger.warning("Google token exchange failed: %s %s", r.status_code, r.text[:300])
+        raise HTTPException(status_code=401, detail="Google sign-in failed. Please try again.")
+    try:
+        info = await run_in_threadpool(
+            google_id_token.verify_oauth2_token, r.json()["id_token"], google_requests.Request(), client_id)
+    except (ValueError, KeyError, GoogleAuthError):
+        raise HTTPException(status_code=401, detail="Google sign-in could not be verified")
+    if not info.get("email_verified"):
+        raise HTTPException(status_code=401, detail="Your Google email address isn't verified")
+    email = info["email"].lower()
     user = await db.users.find_one({"email": email}, {"_id": 0})
     if user:
-        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"picture": data.get("picture")}})
-        user["picture"] = data.get("picture")
+        await db.users.update_one({"user_id": user["user_id"]},
+                                   {"$set": {"picture": info.get("picture"), "google_sub": info["sub"]}})
+        user["picture"] = info.get("picture")
     else:
-        user = new_user_doc(email, data.get("name", ""), "google", picture=data.get("picture"))
+        user = new_user_doc(email, info.get("name", ""), "google", picture=info.get("picture"), google_sub=info["sub"])
         await db.users.insert_one(user)
         user.pop("_id", None)
-    await db.user_sessions.insert_one({
-        "user_id": user["user_id"], "session_token": data["session_token"],
-        "expires_at": now() + timedelta(days=7), "created_at": now(),
-    })
-    response.set_cookie("session_token", data["session_token"], max_age=604800, **COOKIE_OPTS)
-    return {**public_user(user), "csrf_token": csrf_token_for(data["session_token"])}
+    refresh_token = set_auth_cookies(response, user["user_id"], email)
+    return {**public_user(user), "csrf_token": csrf_token_for(refresh_token)}
 
 
 @app.get("/api/auth/me")
@@ -1063,10 +1123,7 @@ async def refresh(request: Request, response: Response):
 
 @app.post("/api/auth/logout")
 async def logout(request: Request, response: Response):
-    session = request.cookies.get("session_token")
-    if session:
-        await db.user_sessions.delete_one({"session_token": session})
-    for name in ("access_token", "refresh_token", "session_token"):
+    for name in ("access_token", "refresh_token"):
         response.delete_cookie(name, path="/", secure=True, samesite="none")
     return {"ok": True}
 
@@ -1125,7 +1182,6 @@ async def reset_password(body: ResetIn):
     await db.users.update_one({"user_id": rec["user_id"]}, {"$set": {
         "password_hash": hash_password(body.password), "password_changed_at": now()}})
     await db.password_reset_tokens.update_many({"user_id": rec["user_id"]}, {"$set": {"used": True}})
-    await db.user_sessions.delete_many({"user_id": rec["user_id"]})
     return {"ok": True}
 
 
@@ -1196,24 +1252,24 @@ async def _read_upload(file: UploadFile) -> bytes:
     return raw
 
 
-async def _last_textract_check(user_id: str):
-    return await db.textract_checks.find_one({"user_id": user_id}, {"_id": 0, "user_id": 0}, sort=[("checked_at", -1)])
+async def _last_engine_check(user_id: str):
+    return await db.engine_checks.find_one({"user_id": user_id}, {"_id": 0, "user_id": 0}, sort=[("checked_at", -1)])
 
 
 @app.get("/api/statements/engine")
 async def statement_engine(user: dict = Depends(get_current_user)):
-    return {"engine": "aws_textract", "configured": textract_enabled(), "region": os.environ.get("AWS_REGION", ""),
-            "last_check": await _last_textract_check(user["user_id"])}
+    return {"engine": "google_document_ai", "configured": docai_enabled(),
+            "region": os.environ.get("DOCUMENTAI_LOCATION", ""), "last_check": await _last_engine_check(user["user_id"])}
 
 
 @app.post("/api/statements/engine/check")
-async def check_textract(user: dict = Depends(get_current_user)):
-    last = await _last_textract_check(user["user_id"])
+async def check_engine(user: dict = Depends(get_current_user)):
+    last = await _last_engine_check(user["user_id"])
     if last and _as_utc(last["checked_at"]) > now() - timedelta(seconds=DIAG_COOLDOWN_SECONDS):
         raise HTTPException(status_code=429, detail=f"Please wait {DIAG_COOLDOWN_SECONDS} seconds between connection checks")
-    result = await run_in_threadpool(run_textract_diagnostic)
+    result = await run_in_threadpool(run_docai_diagnostic)
     doc = {"user_id": user["user_id"], **result, "checked_at": now().isoformat()}
-    await db.textract_checks.insert_one(doc)
+    await db.engine_checks.insert_one(doc)
     doc.pop("_id", None)
     doc.pop("user_id", None)
     return doc
@@ -1226,30 +1282,33 @@ async def convert_statement(
     client_doc = await get_owned_client(user["user_id"], client_id)
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF bank statements are supported")
-    if not textract_enabled():
+    if not docai_enabled():
         raise HTTPException(
             status_code=503,
-            detail="Amazon Textract is not connected yet. Add AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_REGION to enable PDF parsing.",
+            detail="Google Document AI is not connected yet. Add GOOGLE_APPLICATION_CREDENTIALS_JSON, DOCUMENTAI_LOCATION and DOCUMENTAI_PROCESSOR_ID to enable PDF parsing.",
         )
     raw = await _read_upload(file)
     try:
         pages = await run_in_threadpool(count_pages, raw)
     except Exception:
         raise HTTPException(status_code=400, detail="This file is not a readable PDF")
+    if pages > DOCAI_MAX_PAGES:
+        raise HTTPException(status_code=400, detail=f"Statements can have up to {DOCAI_MAX_PAGES} pages per upload. "
+                                                    f"This one has {pages}; split the PDF and upload each part.")
     if not await reserve_pages(user, pages):
         raise HTTPException(status_code=402, detail=page_limit_message(user, pages))
     try:
-        rows = await run_in_threadpool(run_statement_pipeline, raw)
+        rows, totals = await run_in_threadpool(run_statement_pipeline, raw)
     except Exception as e:
         await release_pages(user, pages)
-        logger.exception("Textract pipeline failed")
-        reason = str(e) if isinstance(e, (TextractError, TextractNotConfigured)) else "Statement parsing failed"
+        logger.exception("Document AI pipeline failed")
+        reason = str(e) if isinstance(e, (DocumentAIError, DocumentAINotConfigured)) else "Statement parsing failed"
         raise HTTPException(status_code=424, detail=f"{reason}. Your pages were not charged.")
     doc = {
         "id": new_id("stm"), "kind": "statement", "owner_id": user["user_id"],
         "client_id": client_doc["id"], "client_name": client_doc["name"], "filename": file.filename,
-        "pages": pages, "engine": "aws_textract", "status": "completed", "rows": rows,
-        "summary": summarize(rows), "created_at": now().isoformat(),
+        "pages": pages, "engine": "google_document_ai", "status": "completed", "rows": rows,
+        "statement_totals": totals, "summary": summarize(rows, totals), "created_at": now().isoformat(),
     }
     await db.statements.insert_one(doc)
     doc.pop("_id", None)
@@ -1270,11 +1329,12 @@ async def get_statement(statement_id: str, user: dict = Depends(get_current_user
 
 @app.put("/api/statements/{statement_id}/rows")
 async def save_rows(statement_id: str, body: StatementRows, user: dict = Depends(get_current_user)):
-    await _owned_statement(user, statement_id)
+    current = await _owned_statement(user, statement_id)
     rows = normalize_rows([r.model_dump() for r in body.rows])
     await db.statements.update_one(
         {"id": statement_id, "owner_id": user["user_id"]},
-        {"$set": {"rows": rows, "summary": summarize(rows), "updated_at": now().isoformat()}},
+        {"$set": {"rows": rows, "summary": summarize(rows, current.get("statement_totals")),
+                  "updated_at": now().isoformat()}},
     )
     return await _owned_statement(user, statement_id)
 
@@ -1288,29 +1348,6 @@ async def export_statement(statement_id: str, fmt: str = "csv", user: dict = Dep
     media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if fmt == "xlsx" else "text/csv"
     return Response(content, media_type=media,
                     headers={"Content-Disposition": f'attachment; filename="{base}_ledger.{fmt}"'})
-
-
-@app.post("/api/webhooks/textract")
-async def textract_webhook(request: Request):
-    """Async Textract connector: body {statement_id, Blocks:[...]}, HMAC-SHA256 signed."""
-    body = await request.body()
-    expected = hmac.new(os.environ["TEXTRACT_WEBHOOK_SECRET"].encode(), body, hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, request.headers.get("X-LedgerStream-Signature", "")):
-        raise HTTPException(status_code=401, detail="Invalid webhook signature")
-    try:
-        payload = json.loads(body)
-        statement_id, blocks = payload["statement_id"], payload["Blocks"]
-    except (ValueError, KeyError, TypeError):
-        raise HTTPException(status_code=400, detail="Expected JSON with statement_id and Blocks")
-    doc = await db.statements.find_one({"id": statement_id}, {"_id": 0, "id": 1})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Statement not found")
-    rows = dataframe_to_rows(blocks_to_dataframe(blocks))
-    await db.statements.update_one({"id": statement_id}, {"$set": {
-        "rows": rows, "summary": summarize(rows), "engine": "aws_textract",
-        "status": "completed", "updated_at": now().isoformat(),
-    }})
-    return {"ok": True, "transactions": len(rows)}
 
 
 # ---------- Merchant Payout Splitter ----------
@@ -1762,7 +1799,6 @@ async def ensure_initialized():
         return
     await db.users.create_index("email", unique=True)
     await db.users.create_index("user_id", unique=True)
-    await db.user_sessions.create_index("session_token")
     await db.login_attempts.create_index("identifier")
     await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.clients.create_index([("owner_id", 1), ("created_at", -1)])
@@ -1770,7 +1806,7 @@ async def ensure_initialized():
     await db.payouts.create_index([("owner_id", 1), ("created_at", -1)])
     await db.payment_transactions.create_index("session_id", unique=True)
     await db.contact_messages.create_index([("user_id", 1), ("created_at", -1)])
-    await db.textract_checks.create_index([("user_id", 1), ("checked_at", -1)])
+    await db.engine_checks.create_index([("user_id", 1), ("checked_at", -1)])
     await db.rate_limits.create_index("created_at", expireAfterSeconds=3600)
     async for p in db.payouts.find({"net_variance": {"$exists": False}, "ledger.lines.0": {"$exists": True}},
                                    {"_id": 0, "id": 1, "file_net_total": 1, "ledger": 1}):
@@ -1800,8 +1836,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Stripe-Signature", "X-LedgerStream-Signature",
-                   "X-CSRF-Token"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Stripe-Signature", "X-CSRF-Token"],
     expose_headers=["Content-Disposition"],
     max_age=600,
 )

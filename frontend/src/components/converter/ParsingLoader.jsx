@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 
 const STEPS = [
-  "Parsing statement structure via AWS Textract...",
-  "Extracting tabular transaction coordinates...",
+  "Reading statement with Google Document AI...",
+  "Extracting transaction line items...",
   "Normalizing columns with Pandas...",
   "Validating running balances...",
 ];

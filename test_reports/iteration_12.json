@@ -1,0 +1,54 @@
+{
+  "summary": "Tested live Google Document AI (Form Parser, eu) and own Google OAuth, with a full regression. 4 billed Document AI calls in total: 1 API engine check, 1 API upload, 1 UI engine check, 1 UI upload. BACKEND: test_docai_live.py passes 4/4 and needed no changes. Engine check: ready, 4 ok steps, 0 pages charged, followed by a 429 cooldown. Real upload: 1 page, exactly 3 rows with the right amounts, reference 1001, reconciled, 1 page charged; history, CSV/XLSX export, edit leading to mismatch, and delete leading to 404 all work. A 16-page PDF returns 400 with no pages charged. A fake Google code returns 401. Out-of-date tests were updated so the suite reflects configured=true, and the one that sent a blank PDF to Google was removed. Full suite (excluding the live file): 67/67 pass on two runs in a row; with the live run that is 71 tests. FRONTEND (1920px, demo user): the engine card shows 'Document AI is working' with 4 ok steps (config, credentials as ledgerstream-server@ledgerstreamai.iam.gserviceaccount.com, processor 2aa6e45c564793be in eu, 3 transactions). No not-configured banner shows, and an immediate second click gives the cooldown toast. Uploading for The Burger Shack: the grid shows exactly 3 rows (09/01 Opening deposit $1,000.00 / $1,000.00; 09/02 Office supplies 1001 $150.25 / $849.75; 09/03 Client payment $420.00 / $1,269.75). The banner shows reconciled, the sidebar page counter goes from 0/5 to 1/5, and the panel shows 4 of 5 pages left. A cell edit and save works ('Changes saved', and the change is in the DB). The CSV export holds the edited row and the XLSX export (5 KB) downloads from History. Deleting from History works ('Removed from history'). Google button: it is enabled and goes to accounts.google.com/o/oauth2/v2/auth with the right client_id, redirect_uri=<origin>/auth/google, response_type=code, scope 'openid email profile', state and prompt=select_account. Google then shows the expected redirect_uri_mismatch page. Regression: the Toast payout split balances at $8,522.45 and shows the variance note (file net $5,919.87 vs journal $5,965.71, -$45.84). The History variance filter shows 1 row with badge 1 and its CSV export downloads. Logout sends you to /login, /dashboard is protected, and re-login works.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/forgot-password (test_security_audit rate-limit tests)", "issue": "Known flaky test: the test runner's outbound NAT IP alternates, which splits the rate-limit counter. test_forgot_rate_limit failed once in the first full run, then passed 3 times in a row. This is not an app bug."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard > Document AI connection card", "issues": ["The green status label 'Document AI is working' wraps onto two lines next to the title in the 320px side card. Consider putting the status on its own line or using whitespace-nowrap."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend_tests/test_docai_live.py",
+    "/app/backend_tests/test_docai_unit.py",
+    "/app/backend_tests/test_docai_check_history_variance.py",
+    "/app/backend_tests/test_ledgerstream_regression.py",
+    "/app/backend_tests/test_payout_variance.py",
+    "/app/backend_tests/test_google_oauth_cors.py",
+    "/app/backend_tests/test_security_audit.py",
+    "/app/test_reports/pytest/iteration_12_live.xml",
+    "/app/test_reports/pytest/iteration_12_all.xml"
+  ],
+  "action_items": [
+    "Register <origin>/auth/google (preview and production origins) as Authorized redirect URIs in Google Cloud Console. This is a user action; until it is done Google returns redirect_uri_mismatch.",
+    "Optional: tables_to_dataframe skips any Form Parser table with no Date+Description header row. Multi-page statements whose continuation tables do not repeat the header will silently lose transactions. Consider carrying the last header mapping forward to the next table when its column count matches.",
+    "Optional: _map_columns has no mapping for a single signed 'Amount' column, which many banks use. Those statements would produce rows with no withdrawal or deposit. Consider mapping 'amount' and splitting by sign.",
+    "Optional: COLUMN_KEYWORDS maps any header containing 'check' to reference, so an amount column titled 'Checks' (or 'Checks Paid') would become a reference instead of a withdrawal.",
+    "Update /app/memory/test_credentials.md if the Google redirect URI note ('registered') is not yet true."
+  ],
+  "critical_code_review_comments": [
+    "lambda_function.py is about 1840 lines in one file. It should be split into modules (auth, statements/docai, payouts, billing, email).",
+    "Form Parser results never set statement_totals (they are always null). Reconciliation therefore depends only on the printed running balances, and the opening balance is back-calculated from the first row. That is fine, but statements with no balance column will always show 'unavailable'.",
+    "Deleting a statement does not refund its pages. This looks intended, but confirm the product rule.",
+    "Engine checks are billed Document AI calls. The cooldown is 30s per user only, so many accounts could each run checks. Consider a global/daily cap."
+  ],
+  "updated_files": [
+    "/app/backend_tests/test_docai_check_history_variance.py (removed the not_configured test; cooldown now tested without a billed call by seeding a recent engine_checks doc; isolation asserts configured=true)",
+    "/app/backend_tests/test_payout_variance.py (test_docai_not_configured_503 replaced by test_docai_configured, no upload)",
+    "/app/backend_tests/test_ledgerstream_regression.py (engine configured=true/eu; removed test_statement_docai_not_configured_not_charged, which sent a blank PDF to Google; page cap now asserts 402 strictly)",
+    "/app/backend_tests/test_google_oauth_cors.py (health parser_configured=true; fake code returns 401 strictly)",
+    "/app/backend_tests/test_docai_unit.py (fixed the fake document missing pages/text, which caused an AttributeError in the new Form Parser fallback; added test_form_parser_fallback)"
+  ],
+  "success_rate": {"backend": "100% (71/71 including 4 live; 1 known NAT-flaky rate-limit test)", "frontend": "100%"},
+  "flaky_tests": [{"test": "test_security_audit.py::test_forgot_rate_limit", "failure_rate": "1 of 4 runs", "reason": "The outbound NAT IP alternates and splits the rate-limit key."}],
+  "seed_data_creation": "None kept. Cleanup done: 1 demo payout deleted (the statement was deleted through the UI), demo set to plan free / trial / pages_used 0, 2 seeded clients intact, no TEST_ users or clients left, rate_limits and engine_checks cleared.",
+  "test_credentials": "demo@ledgerstream.ai / LedgerDemo#2026 works.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Document AI is live and billed. Avoid re-running test_docai_live.py unless needed (2 billed calls). The rest of the suite (pytest /app/backend_tests --ignore=test_docai_live.py) makes no billed calls. The cooldown test seeds engine_checks directly. Sample PDF builder: test_docai_live.sample_pdf(). Burger Shack client id is cli_dd417b47fe7e and demo user_id is user_a7e293d619d1. UI: file inputs are [data-testid=pdf-upload-dropzone-input] and [data-testid=payout-upload-dropzone-input]. Use set_input_files with a buffer and a .csv name for payouts. The XLSX export from the grid dropdown was not exercised directly: re-opening the dropdown right after the CSV download timed out in Playwright. XLSX was verified through the History export button, which uses the same endpoint."
+}

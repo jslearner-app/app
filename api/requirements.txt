@@ -6,8 +6,10 @@ python-multipart==0.0.32
 mangum==0.22.0
 motor==3.7.1
 pymongo==4.18.2
-boto3==1.43.114
-botocore==1.43.114
+google-cloud-documentai==3.17.0
+google-api-core==2.33.0
+google-auth==2.62.0
+requests==2.34.2
 pandas==3.0.6
 numpy==2.4.6
 pypdf==6.21.2

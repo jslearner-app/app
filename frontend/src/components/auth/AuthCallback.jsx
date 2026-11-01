@@ -1,12 +1,13 @@
 import { useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { api, errMsg } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { FullScreenLoader } from "@/components/common/FullScreenLoader";
+import { GOOGLE_STATE_KEY, googleRedirectUri } from "@/components/auth/GoogleButton";
 
 export const AuthCallback = () => {
-  const location = useLocation();
+  const [params] = useSearchParams();
   const navigate = useNavigate();
   const { setUser } = useAuth();
   const hasProcessed = useRef(false);
@@ -14,18 +15,22 @@ export const AuthCallback = () => {
   useEffect(() => {
     if (hasProcessed.current) return;
     hasProcessed.current = true;
-    const sessionId = new URLSearchParams(location.hash.slice(1)).get("session_id");
+    const expected = sessionStorage.getItem(GOOGLE_STATE_KEY);
+    sessionStorage.removeItem(GOOGLE_STATE_KEY);
+    const fail = (msg) => {
+      toast.error(msg);
+      navigate("/login", { replace: true });
+    };
+    if (params.get("error")) return fail("Google sign-in was cancelled.");
+    if (!params.get("code") || !expected || params.get("state") !== expected) return fail("Google sign-in expired. Please try again.");
     api
-      .post("/auth/google/session", { session_id: sessionId })
+      .post("/auth/google", { code: params.get("code"), redirect_uri: googleRedirectUri() })
       .then(({ data }) => {
         setUser(data);
         navigate("/dashboard", { replace: true });
       })
-      .catch((e) => {
-        toast.error(errMsg(e));
-        navigate("/login", { replace: true });
-      });
-  }, [location.hash, navigate, setUser]);
+      .catch((e) => fail(errMsg(e)));
+  }, [params, navigate, setUser]);
 
   return <FullScreenLoader label="Signing you in..." />;
 };

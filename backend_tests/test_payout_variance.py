@@ -95,13 +95,7 @@ def test_other_platforms(s, client, platform):
         assert v["flagged"] == (v["difference"] != 0)
 
 
-# Textract SCP 424 message, not charged
-def test_textract_scp_424(s, client):
-    before = mdb.users.find_one({"email": DEMO["email"]})["pages_used"]
-    r = s.post(f"{API}/statements", data={"client_id": client["id"]},
-               files={"file": ("TEST_s.pdf", io.BytesIO(blank_pdf(1)), "application/pdf")}, timeout=90)
-    print(r.status_code, r.text)
-    assert r.status_code == 424
-    det = r.json()["detail"]
-    assert "service control policy" in det and "not charged" in det
-    assert mdb.users.find_one({"email": DEMO["email"]})["pages_used"] == before
+# Document AI configured: engine reports configured=true (no billed upload here; live upload is in test_docai_live.py)
+def test_docai_configured(s):
+    e = s.get(f"{API}/statements/engine").json()
+    assert e["configured"] is True and e["region"] == "eu"

@@ -109,10 +109,14 @@ let webpackConfig = {
       '@': path.resolve(__dirname, 'src'),
     },
     configure: (webpackConfig) => {
-      // Expose NEXT_PUBLIC_API_URL to the browser bundle (Emergent preview maps it from REACT_APP_BACKEND_URL).
+      // Expose NEXT_PUBLIC_* keys to the bundle alongside REACT_APP_*; API URL accepts either prefix (preview falls back to REACT_APP_BACKEND_URL).
       const definePlugin = webpackConfig.plugins.find((p) => p.constructor.name === "DefinePlugin");
-      definePlugin.definitions["process.env"].NEXT_PUBLIC_API_URL = JSON.stringify(
-        process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL
+      const publicEnv = definePlugin.definitions["process.env"];
+      Object.keys(process.env)
+        .filter((k) => k.startsWith("NEXT_PUBLIC_"))
+        .forEach((k) => { publicEnv[k] = JSON.stringify(process.env[k]); });
+      publicEnv.NEXT_PUBLIC_API_URL = JSON.stringify(
+        process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_URL
       );
 
       // Add ignored patterns to reduce watched directories
