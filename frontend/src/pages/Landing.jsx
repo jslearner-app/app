@@ -22,7 +22,7 @@ const Section = ({ id, eyebrow, title, sub, children, testId }) => (
 );
 
 const MODULES = [
-  { icon: FileSpreadsheet, title: "Bank Statement Converter", text: "Drop multi-page PDF statements. Amazon Textract table extraction and a Pandas pipeline return a flat, editable ledger.", cols: ["Date", "Description", "Reference/Check #", "Withdrawals", "Deposits", "Balance"], out: "Excel / CSV ledger for backlogs" },
+  { icon: FileSpreadsheet, title: "Bank Statement Converter", text: "Drop multi-page PDF statements. Google Document AI bank statement parsing and a Pandas pipeline return a flat, editable ledger.", cols: ["Date", "Description", "Reference/Check #", "Withdrawals", "Deposits", "Balance"], out: "Excel / CSV ledger for backlogs" },
   { icon: Scale, title: "Merchant Payout Splitter", text: "Upload Toast, DoorDash, UberEats, Shopify or Stripe exports. We split gross sales into net cash and commission expense.", cols: ["Dr Bank Clearing", "Dr Commissions Expense", "Cr Gross Sales Revenue"], out: "Balanced QuickBooks journal entry CSV" },
 ];
 

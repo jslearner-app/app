@@ -25,7 +25,7 @@ const REVIEWS = [
 ];
 
 const SECURITY = [
-  { icon: ServerCog, title: "AWS Isolated Parsing", sub: "Each statement is processed in an isolated job" },
+  { icon: ServerCog, title: "Isolated Cloud Parsing", sub: "Each statement is processed in an isolated job" },
   { icon: Lock, title: "256-bit Document Isolation", sub: "Encrypted in transit and at rest" },
   { icon: Timer, title: "Auto-delete in 1 hour", sub: "Source files are never retained" },
   { icon: CreditCard, title: "Stripe Verified", sub: "PCI-compliant subscription billing" },

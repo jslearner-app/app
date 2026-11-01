@@ -12,7 +12,7 @@ import { IsolationBadge } from "@/components/trust/TrustSignals";
 import { ParsingLoader } from "./ParsingLoader";
 import { StatementGrid } from "./StatementGrid";
 import { ReconciliationBanner } from "./ReconciliationBanner";
-import { TextractCheck } from "./TextractCheck";
+import { EngineCheck } from "./EngineCheck";
 import { notifyHistoryChanged } from "@/hooks/useReviewCount";
 
 const Stat = ({ label, value, testId, tone = "text-slate-50" }) => (
@@ -43,7 +43,7 @@ export const ConverterPanel = ({ clients, onConverted }) => {
     if (!clientId) return toast.error("Select a client profile first");
     const limitReason = user.plan === "free" ? "trial_limit" : "monthly_limit";
     if (user.usage_pages >= user.page_limit) return navigate(`/pricing?reason=${limitReason}`);
-    if (engine && !engine.configured) return toast.error("Amazon Textract is not connected yet. Add your AWS keys to enable PDF parsing.");
+    if (engine && !engine.configured) return toast.error("Google Document AI is not connected yet. Add your Google keys to enable PDF parsing.");
     setParsing(file.name);
     setParseError("");
     const form = new FormData();
@@ -79,7 +79,7 @@ export const ConverterPanel = ({ clients, onConverted }) => {
             <FileText className="h-5 w-5 text-emerald-400 shrink-0" />
             <div className="min-w-0">
               <div className="truncate font-semibold text-slate-100" data-testid="statement-filename">{statement.filename}</div>
-              <div className="text-xs text-slate-400">{statement.client_name} · {statement.pages} page(s) · Amazon Textract</div>
+              <div className="text-xs text-slate-400">{statement.client_name} · {statement.pages} page(s) · Google Document AI</div>
             </div>
           </div>
           <Button variant="outline" onClick={() => setStatement(null)} data-testid="convert-another-button" className="border-slate-700 bg-transparent text-slate-200 hover:bg-slate-800">
@@ -102,8 +102,8 @@ export const ConverterPanel = ({ clients, onConverted }) => {
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]" data-testid="converter-panel">
       <div>
         {engine && !engine.configured && (
-          <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-200" data-testid="textract-not-configured-banner">
-            Amazon Textract is not connected yet. Add <span className="num">AWS_ACCESS_KEY_ID</span>, <span className="num">AWS_SECRET_ACCESS_KEY</span> and <span className="num">AWS_REGION</span> to start parsing statements.
+          <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-200" data-testid="engine-not-configured-banner">
+            Google Document AI is not connected yet. Add <span className="num">GOOGLE_APPLICATION_CREDENTIALS_JSON</span>, <span className="num">DOCUMENTAI_LOCATION</span> and <span className="num">DOCUMENTAI_PROCESSOR_ID</span> to start parsing statements.
           </div>
         )}
         {parseError && (
@@ -127,7 +127,7 @@ export const ConverterPanel = ({ clients, onConverted }) => {
           <label className="text-xs uppercase tracking-wider text-slate-400">Client profile</label>
           <div className="mt-2"><ClientSelect clients={clients} value={clientId} onChange={setClientId} testId="converter-client-select" /></div>
         </div>
-        {engine && <TextractCheck initial={engine.last_check} />}
+        {engine && <EngineCheck initial={engine.last_check} />}
         <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-400 space-y-2">
           <div className="text-slate-200 font-medium">Output columns</div>
           <p>Date · Description · Reference/Check # · Withdrawals · Deposits · Balance</p>

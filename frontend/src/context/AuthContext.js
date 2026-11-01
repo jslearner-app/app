@@ -19,8 +19,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    // OAuth callback: AuthCallback exchanges the session_id first
-    if (window.location.hash?.includes("session_id=")) {
+    // Google OAuth callback: AuthCallback exchanges the code first
+    if (window.location.pathname === "/auth/google") {
       setUser(false);
       return;
     }
