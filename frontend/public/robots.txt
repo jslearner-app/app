@@ -1,8 +1,14 @@
+# User-Agent sets rules for all search engines globally
 User-agent: *
 Allow: /
+Allow: /login
+Allow: /register
+
+# Protect private system memory directories from leaking into search results
 Disallow: /dashboard
-Disallow: /clients
-Disallow: /history
-Disallow: /billing
-Disallow: /pricing
-Disallow: /payment/
+Disallow: /api/
+Disallow: /_next/
+Disallow: /static/
+
+# Point search engines directly to your dynamic index map
+Sitemap: https://ledgerstreamai.com
