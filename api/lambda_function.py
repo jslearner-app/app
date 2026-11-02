@@ -1033,57 +1033,62 @@ async def register(body: RegisterIn, request: Request, response: Response, backg
     doc = new_user_doc(email, body.name.strip(), "password",
                        firm_name=body.firm_name.strip(), password_hash=hash_password(body.password))
     await db.users.insert_one(doc)
-    background.add_task(send_welcome_email, doc, _app_base_url(request))
+    background.add_task(send_welcome_email, doc)
     refresh_token = set_auth_cookies(response, doc["user_id"], email)
     return {**public_user(doc), "csrf_token": csrf_token_for(refresh_token)}
 
 
-def _app_base_url(request: Request) -> str:
-    try:
-        return trusted_origin(request.headers.get("origin", ""), request)
-    except HTTPException:
-        return ALLOWED_ORIGINS[0]
+WELCOME_SITE_URL = "https://ledgerstreamai.com"
+WELCOME_BANNER_URL = f"{WELCOME_SITE_URL}/email/welcome-banner.jpg"
+WELCOME_SUBJECT = "Welcome to LedgerStream AI \u2013 Your extraction dashboard is ready"
+_P = 'style="margin:0 0 14px;font-size:14px;line-height:1.6;color:#0f172a"'
+_H3 = 'style="margin:22px 0 10px;font-size:15px;color:#0b132b"'
 
 
-def _render_welcome_email(name: str, dashboard_link: str) -> str:
-    items = "".join(
-        f'<li style="margin:0 0 10px"><strong style="color:#0b132b">{title}</strong><br>{text}</li>'
-        for title, text in [
-            (f"{FREE_PAGE_LIMIT} free pages to start",
-             f"Your free trial includes {FREE_PAGE_LIMIT} statement pages. Pages are only counted when a conversion succeeds."),
-            ("Bank Statement Converter",
-             "Upload PDF bank statements and get an editable ledger with date, description, reference, withdrawals, "
-             "deposits and balance. Every statement is checked against its running balance and flagged for review if "
-             "the numbers don't add up. Export to CSV or Excel."),
-            ("Merchant Payout Splitter",
-             "Turn Toast, DoorDash, UberEats, Shopify, Stripe and LawPay payout files into balanced QuickBooks journal "
-             "entries. LawPay fees are taken line by line from the file, and any gap between the file's net payout and "
-             "the journal deposit is flagged."),
-            ("Security",
-             "Each firm's clients and files are kept separate from every other account, sessions use secure "
-             "browser-only cookies, and repeated failed sign-ins are locked out."),
-        ]
-    )
+def _render_welcome_email() -> str:
     return (
         '<table role="presentation" width="100%" style="font-family:Arial,sans-serif;background:#f8fafc">'
-        '<tr><td style="padding:24px">'
-        f'<h2 style="margin:0 0 12px;font-size:20px;color:#0b132b">Welcome to {escape(EMAIL_FROM_NAME)}</h2>'
-        f'<p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#0f172a">Hi {escape(name or "there")}, your account '
-        'is ready. Here is what you can do right away:</p>'
-        f'<ul style="margin:0 0 16px;padding-left:18px;font-size:14px;line-height:1.5;color:#334155">{items}</ul>'
-        f'<p style="margin:20px 0"><a href="{escape(dashboard_link)}" style="background:#10b981;color:#052e1f;'
-        'padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold">Open your dashboard</a></p>'
-        f'<p style="margin-top:16px;font-size:12px;color:#94a3b8">Sent by {escape(EMAIL_FROM_NAME)}. '
-        'We never ask for your password or card details by email.</p>'
-        '</td></tr></table>'
+        '<tr><td style="padding:24px"><div style="max-width:600px;margin:0 auto">'
+        '<div style="text-align: center; margin-bottom: 20px;">'
+        f'<img src="{WELCOME_BANNER_URL}" alt="LedgerStream AI Welcome Banner" '
+        'style="width: 100%; max-width: 600px; height: auto; border-radius: 4px;" /></div>'
+        '<h2 style="margin:0 0 16px;font-size:20px;color:#0b132b">Welcome to LedgerStream AI</h2>'
+        f'<p {_P}>Hi there,</p>'
+        f'<p {_P}>Thank you for creating an account with LedgerStream AI! We are thrilled to help you automate your '
+        'financial data pipelines and eliminate manual spreadsheet entry from your bookkeeping workflow.</p>'
+        f'<p {_P}>Your secure, isolated workspace canvas is now fully active.</p>'
+        f'<p {_P}>To help you get started right away, your practice profile has been credited with 5 free high-precision '
+        'page extractions on the house. These are only deducted when a file conversion succeeds. You can log in and test '
+        'the system immediately on your messiest data layouts:</p>'
+        f'<p style="margin:22px 0"><a href="{WELCOME_SITE_URL}" style="background:#10b981;color:#052e1f;'
+        'padding:11px 20px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block">Open Dashboard</a></p>'
+        f'<h3 {_H3}>What to test first:</h3>'
+        '<ol style="margin:0 0 14px;padding-left:20px;font-size:14px;line-height:1.6;color:#0f172a">'
+        '<li style="margin:0 0 10px"><strong>High-Precision Bank Statements:</strong> Drop any multi-page checking summary '
+        'PDF into the uploader zone. Our enterprise-grade engine will extract transaction data rows cleanly into CSV or '
+        'Excel files without dropping trailing decimals or shifting rows.</li>'
+        '<li style="margin:0 0 10px"><strong>Merchant Payout Splitting:</strong> Upload unified statement distributions '
+        'from platforms like Toast, DoorDash, UberEats, Shopify, Stripe, or LawPay. The system will automatically '
+        'decompose bulk deposits, isolate network processing fees, and map out balanced ledger lines down to the exact '
+        'penny.</li></ol>'
+        f'<h3 {_H3}>Enterprise Security &amp; Isolation:</h3>'
+        f'<p {_P}>We take data sovereignty incredibly seriously. Each accounting firm\'s data is kept entirely separate '
+        'under strict isolation protocols, secured with enterprise-grade sign-in cookies and automated lockouts after '
+        'repeated failed sign-ins to protect client financial logs.</p>'
+        f'<p {_P}>If you encounter any complex statement layouts, need extra test credits for an agency trial batch, or '
+        'have structural questions about QuickBooks/Xero ledger alignment, please reply directly to this thread. Our '
+        'support team is here to assist you.</p>'
+        f'<p {_P}>Best regards,<br>Abdullahi Badmus<br>Founder, LedgerStream AI<br>'
+        '<a href="mailto:support@ledgerstreamai.com" style="color:#059669">support@ledgerstreamai.com</a><br>'
+        f'<a href="{WELCOME_SITE_URL}" style="color:#059669">https://ledgerstreamai.com</a></p>'
+        '</div></td></tr></table>'
     )
 
 
-async def send_welcome_email(user: dict, base_url: str):
+async def send_welcome_email(user: dict):
     """Runs after the sign-up response is sent; failures are logged, never surfaced to the user."""
     try:
-        await send_email(to=user["email"], subject=f"Welcome to {EMAIL_FROM_NAME}",
-                         html=_render_welcome_email(user.get("name", ""), f"{base_url}/dashboard"))
+        await send_email(to=user["email"], subject=WELCOME_SUBJECT, html=_render_welcome_email())
         logger.info("Welcome email sent to user %s", user["user_id"])
     except HTTPException as e:
         logger.warning("Welcome email failed for %s: %s", user["user_id"], e.detail)
@@ -1145,7 +1150,7 @@ async def google_login(body: GoogleCodeIn, request: Request, response: Response,
         user = new_user_doc(email, info.get("name", ""), "google", picture=info.get("picture"), google_sub=info["sub"])
         await db.users.insert_one(user)
         user.pop("_id", None)
-        background.add_task(send_welcome_email, user, _app_base_url(request))
+        background.add_task(send_welcome_email, user)
     refresh_token = set_auth_cookies(response, user["user_id"], email)
     return {**public_user(user), "csrf_token": csrf_token_for(refresh_token)}
 
