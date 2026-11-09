@@ -68,6 +68,10 @@ stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
 STRIPE_WEBHOOK_SECRET = os.environ["STRIPE_WEBHOOK_SECRET"]
 STRIPE_TAX_MODE = "full"
 PLAN_LOOKUP = {"starter": "starter_monthly", "agency": "agency_monthly"}
+STRIPE_CATALOG = {
+    "starter_monthly": {"product_key": "ledgerstream_starter", "name": "LedgerStream AI Starter", "amount": 9900},
+    "agency_monthly": {"product_key": "ledgerstream_agency", "name": "LedgerStream AI Agency", "amount": 19900},
+}
 
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 EMAIL_BASE_URL = "https://integrations.emergentagent.com"
@@ -1602,15 +1606,33 @@ async def billing_summary(user: dict = Depends(get_current_user)):
     return {**public_user(user), "has_portal": bool(user.get("stripe_customer_id"))}
 
 
+def get_plan_price(lookup_key: str):
+    """Returns the active plan price; creates the product + monthly USD price on first use in a new Stripe account."""
+    prices = stripe.Price.list(lookup_keys=[lookup_key], active=True, limit=1).data
+    if prices:
+        return prices[0]
+    entry = STRIPE_CATALOG[lookup_key]
+    product = next((p for p in stripe.Product.list(active=True, limit=100).auto_paging_iter()
+                    if (p.metadata or {}).get("emergent_product_id") == entry["product_key"]), None)
+    if product is None:
+        product = stripe.Product.create(name=entry["name"], tax_code="txcd_10103001", metadata={
+            "managed_by": "emergent", "emergent_product_id": entry["product_key"]})
+    logger.info("Creating Stripe price %s on product %s", lookup_key, product.id)
+    return stripe.Price.create(product=product.id, unit_amount=entry["amount"], currency="usd",
+                               recurring={"interval": "month"}, lookup_key=lookup_key, transfer_lookup_key=True)
+
+
 @app.post("/api/payments/checkout")
 async def create_checkout(body: CheckoutIn, request: Request, user: dict = Depends(get_current_user)):
     lookup_key = PLAN_LOOKUP.get(body.plan)
     if not lookup_key:
         raise HTTPException(status_code=400, detail="Unknown plan")
-    prices = stripe.Price.list(lookup_keys=[lookup_key], active=True, limit=1).data
-    if not prices:
-        raise HTTPException(status_code=500, detail=f"Price not found: {lookup_key}")
-    price = prices[0]
+    try:
+        price = await run_in_threadpool(get_plan_price, lookup_key)
+    except stripe.error.StripeError as e:
+        logger.exception("Stripe plan setup failed")
+        raise HTTPException(status_code=502, detail=f"Stripe couldn't set up the {body.plan.title()} plan: "
+                                                    f"{e.user_message or 'check that your Stripe key can create products and prices'}")
     origin = trusted_origin(body.origin_url, request)
     kwargs = dict(
         line_items=[{"price": price.id, "quantity": 1}],
@@ -1654,7 +1676,7 @@ def _portal_configuration_id() -> str:
     """Portal config that lets subscribers switch between Starter and Agency."""
     products = []
     for lookup_key in PLAN_LOOKUP.values():
-        price = stripe.Price.list(lookup_keys=[lookup_key], active=True, limit=1).data[0]
+        price = get_plan_price(lookup_key)
         products.append({"product": price.product, "prices": [price.id]})
     features = {
         "invoice_history": {"enabled": True},
