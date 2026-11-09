@@ -22,4 +22,3 @@ typing_extensions==4.16.0
 pandas==3.0.6
 numpy==2.4.6
 mangum==0.22.0
-https://emergentagent.com
