@@ -19,4 +19,6 @@ idna==3.20
 sniffio==1.3.1
 starlette==0.37.2
 typing_extensions==4.16.0
-https://customer-assets.emergentagent.com/internal-asset/library/litellm-1.80.0-py3-none-any.whl
+pandas==3.0.6
+numpy==2.4.6
+https://emergentagent.com
