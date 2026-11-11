@@ -1805,14 +1805,13 @@ def _render_contact_message(desk_label: str, name: str, email: str, role: str, f
 
 @app.post("/api/contact")
 async def submit_contact(request: Request):
-    """Handles the user contact support form submissions using pure Resend API."""
+    """Handles user contact form submissions cleanly using Resend's API."""
     try:
         data = await request.json()
         name = data.get("name", "Anonymous User")
         from_email = data.get("email", "no-reply@ledgerstreamai.com")
         message_content = data.get("message", "")
         
-        # Build the HTML content for your support desk inbox
         html_content = f"""
         <h3>New Contact Form Message</h3>
         <p><b>Name:</b> {name}</p>
@@ -1821,7 +1820,6 @@ async def submit_contact(request: Request):
         <p>{message_content}</p>
         """
         
-        # Connect natively to Resend's delivery pipeline
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 "https://resend.com",
@@ -1847,6 +1845,7 @@ async def submit_contact(request: Request):
     except Exception as e:
         print(f"Contact form pipeline failure: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server transaction error")
+
 
 
 
