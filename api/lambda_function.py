@@ -1849,6 +1849,7 @@ async def submit_contact(request: Request):
         raise HTTPException(status_code=500, detail="Internal server transaction error")
 
 
+
 # ---------- Startup: indexes + optional demo account ----------
 DEMO_CLIENTS = [
     {"name": "The Burger Shack", "industry": "Restaurant", "platforms": ["toast", "doordash", "ubereats"]},
