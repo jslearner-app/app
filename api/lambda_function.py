@@ -74,10 +74,12 @@ STRIPE_CATALOG = {
 }
 
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
-EMAIL_KEY = os.environ.get("RESEND_API_KEY", "")
-EMAIL_FROM_NAME = os.environ["EMAIL_FROM_NAME"]
 EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")
 RESEND_API_URL = "https://api.resend.com/emails"
+EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "LedgerStream AI")
+EMAIL_BASE_URL = f"https://{os.environ.get('DOMAIN', 'ledgerstreamai.com')}"
+EMAIL_KEY = os.environ.get("RESEND_API_KEY", "")
+
 
 _RAW_ORIGINS = [o.strip().rstrip("/") for o in os.environ["CORS_ORIGINS"].split(",") if o.strip()]
 if "*" in _RAW_ORIGINS:
