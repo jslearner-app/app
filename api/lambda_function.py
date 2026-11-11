@@ -1848,6 +1848,7 @@ async def submit_contact(request: Request):
         print(f"Contact form pipeline failure: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server transaction error")
 
+
 # ---------- Startup: indexes + optional demo account ----------
 DEMO_CLIENTS = [
     {"name": "The Burger Shack", "industry": "Restaurant", "platforms": ["toast", "doordash", "ubereats"]},
