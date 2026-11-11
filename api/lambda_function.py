@@ -1804,14 +1804,48 @@ def _render_contact_message(desk_label: str, name: str, email: str, role: str, f
 
 
 @app.post("/api/contact")
+async def submit_contact(body: ContactIn, user: dict = Depends(get_current_user)):
+    since = (now() - timedelta(hours=1)).isoformat()
+    recent = await db.contact_messages.count_documents(
+        {"user_id": user["user_id"], "created_at": {"$gte": since}, "status": {"$ne": "failed"}})
+    if recent >= CONTACT_HOURLY_LIMIT:
+        raise HTTPException(status_code=429, detail="You've sent several messages recently. Please try again in an hour.")
+    desk_label, env_key = CONTACT_DESKS[body.desk]
+    record = {
+        "id": new_id("msg"), "user_id": user["user_id"], "email": user["email"], "desk": body.desk,
+        "name": body.name, "role": body.role, "message": body.message,
+        "status": "pending", "created_at": now().isoformat(),
+    }
+    await db.contact_messages.insert_one(record)
+    html = _render_contact_message(desk_label, record["name"], user["email"], CONTACT_ROLES[body.role],
+                                   user.get("firm_name", ""), user.get("plan", "free"), record["message"])
 async def submit_contact(request: Request):
-    """Handles user contact form submissions cleanly using Resend's API."""
+    """Handles the user contact support form submissions using pure Resend API."""
     try:
+        email_id = await send_email(to=os.environ[env_key],
+                                    subject=f"[{EMAIL_FROM_NAME}] {desk_label} message from {body.name}", html=html)
+    except HTTPException:
+        await db.contact_messages.update_one({"id": record["id"]}, {"$set": {"status": "failed"}})
+        raise
+    await db.contact_messages.update_one({"id": record["id"]}, {"$set": {"status": "sent", "email_id": email_id}})
+    confirmation = "sent"
+    try:
+        await send_email(
+            to=user["email"], subject=f"We got your message - {EMAIL_FROM_NAME}",
+            html=_render_contact_confirmation(record["name"], desk_label, body.desk, record["id"]),
+        )
+    except HTTPException as e:
+        confirmation = "failed"
+        logger.warning("Confirmation email failed for %s: %s", record["id"], e.detail)
+    await db.contact_messages.update_one({"id": record["id"]}, {"$set": {"confirmation_status": confirmation}})
+    return {"ok": True, "id": record["id"], "desk": body.desk, "confirmation_sent": confirmation == "sent"}
+
         data = await request.json()
         name = data.get("name", "Anonymous User")
         from_email = data.get("email", "no-reply@ledgerstreamai.com")
         message_content = data.get("message", "")
         
+        # Build the HTML content for your support desk inbox
         html_content = f"""
         <h3>New Contact Form Message</h3>
         <p><b>Name:</b> {name}</p>
@@ -1820,6 +1854,7 @@ async def submit_contact(request: Request):
         <p>{message_content}</p>
         """
         
+        # Connect natively to Resend's delivery pipeline
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 "https://resend.com",
