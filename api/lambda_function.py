@@ -900,23 +900,30 @@ def _assert_safe_email(subject: str, html: str) -> None:
 
 async def send_email(*, to: str, subject: str, html: str) -> str:
     _assert_safe_email(subject, html)
-    payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
+    
+    # Resend requires a strict payload schema structure
+    payload = {
+        "from": f"{EMAIL_FROM_NAME} <support@ledgerstreamai.com>",
+        "to": [to],
+        "subject": subject,
+        "html": html
+    }
     if EMAIL_REPLY_TO:
-        payload["contact_email"] = EMAIL_REPLY_TO
+        payload["reply_to"] = EMAIL_REPLY_TO
+
     try:
         async with httpx.AsyncClient(timeout=30) as http:
-            resp = await http.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
-                                   headers={"X-Email-Key": EMAIL_KEY}, json=payload)
+            resp = await http.post(
+                RESEND_API_URL,  # Maps cleanly to 'https://resend.com'
+                headers={
+                    "Authorization": f"Bearer {EMAIL_KEY}", # Connects your active re_... token
+                    "Content-Type": "application/json"
+                }, 
+                json=payload
+            )
         resp.raise_for_status()
         return resp.json().get("id")
     except httpx.HTTPStatusError as e:
-        try:
-            code = e.response.json().get("code", "")
-        except ValueError:
-            code = ""
-        if code in ("insufficient_credits", "integration_disabled", "daily_limit_reached"):
-            logger.warning("Email paused: %s (%s): %s", code, e.response.status_code, e.response.text)
-            raise HTTPException(status_code=503, detail="Email is temporarily unavailable")
         logger.error("Email send failed: %s %s", e.response.status_code, e.response.text)
         raise HTTPException(status_code=502, detail="Failed to send email")
     except HTTPException:
@@ -924,6 +931,7 @@ async def send_email(*, to: str, subject: str, html: str) -> str:
     except Exception as e:
         logger.error("Email send error: %s", e)
         raise HTTPException(status_code=500, detail="Failed to send email")
+
 
 
 # =====================================================================
