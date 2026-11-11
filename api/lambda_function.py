@@ -1850,6 +1850,7 @@ async def submit_contact(request: Request):
 
 
 
+
 # ---------- Startup: indexes + optional demo account ----------
 DEMO_CLIENTS = [
     {"name": "The Burger Shack", "industry": "Restaurant", "platforms": ["toast", "doordash", "ubereats"]},
