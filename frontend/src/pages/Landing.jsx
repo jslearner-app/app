@@ -114,6 +114,83 @@ export default function Landing() {
           <Link to="/contact" className="hover:text-emerald-300" data-testid="landing-footer-contact-link">Contact Support & Sales</Link>
           <span>© {new Date().getFullYear()} LedgerStream AI. Built for bookkeeping firms.</span>
         </div>
+
+        {/* Verified Software Directory Scrolling Marquee */}
+<div className="mt-8 pt-6 border-t border-slate-800/80 overflow-hidden">
+  <style>{`
+    @keyframes ledgerMarquee {
+      0% { transform: translateX(0%); }
+      100% { transform: translateX(-50%); }
+    }
+    .animate-ledger-marquee {
+      display: flex;
+      width: max-content;
+      animation: ledgerMarquee 22s linear infinite;
+    }
+    .animate-ledger-marquee:hover {
+      animation-play-state: paused;
+    }
+  `}</style>
+
+  <div className="text-center mb-3">
+    <span className="text-xs font-medium uppercase tracking-wider text-slate-400">
+      Verified &amp; Listed Across Top Software Directories
+    </span>
+  </div>
+
+  <div className="relative w-full overflow-hidden">
+    <div className="animate-ledger-marquee gap-4">
+      {[0, 1].map((loopIndex) => (
+        <div key={loopIndex} className="flex items-center gap-4 pr-4">
+          {/* G2 Badge */}
+          <a
+            href="https://g2.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-orange-500/60 text-slate-200 text-xs font-medium transition-all"
+          >
+            <span className="w-2 h-2 rounded-full bg-orange-500" />
+            <span>Listed on <strong>G2</strong></span>
+          </a>
+
+          {/* Capterra Badge */}
+          <a
+            href="https://capterra.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-sky-500/60 text-slate-200 text-xs font-medium transition-all"
+          >
+            <span className="w-2 h-2 rounded-full bg-sky-400" />
+            <span>Verified on <strong>Capterra</strong></span>
+          </a>
+
+          {/* Trustpilot Badge */}
+          <a
+            href="https://trustpilot.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-emerald-500/60 text-slate-200 text-xs font-medium transition-all"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span>Review us on <strong>Trustpilot</strong></span>
+          </a>
+
+          {/* GetApp Badge */}
+          <a
+            href="https://g2.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-indigo-500/60 text-slate-200 text-xs font-medium transition-all"
+          >
+            <span className="w-2 h-2 rounded-full bg-indigo-400" />
+            <span>Featured on <strong>GetApp</strong></span>
+          </a>
+        </div>
+      ))}
+    </div>
+  </div>
+</div>
+
       </footer>
     </div>
   );
