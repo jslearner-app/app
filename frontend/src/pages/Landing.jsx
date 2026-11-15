@@ -109,11 +109,6 @@ export default function Landing() {
       </Section>
 
       <footer className="border-t border-slate-800/70">
-        <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-16 py-10 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between text-sm text-slate-500">
-          <Brand />
-          <Link to="/contact" className="hover:text-emerald-300" data-testid="landing-footer-contact-link">Contact Support & Sales</Link>
-          <span>© {new Date().getFullYear()} LedgerStream AI. Built for bookkeeping firms.</span>
-        </div>
 
         {/* Verified Software Directory Scrolling Marquee */}
 <div className="mt-8 pt-6 border-t border-slate-800/80 overflow-hidden">
@@ -142,47 +137,57 @@ export default function Landing() {
     <div className="animate-ledger-marquee gap-4">
       {[0, 1].map((loopIndex) => (
         <div key={loopIndex} className="flex items-center gap-4 pr-4">
-          {/* G2 Badge */}
+          {/* G2 Badge with Icon */}
           <a
             href="https://g2.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-orange-500/60 text-slate-200 text-xs font-medium transition-all"
+            className="inline-flex items-center gap-2.5 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-orange-500/60 text-slate-200 text-xs font-medium transition-all"
           >
-            <span className="w-2 h-2 rounded-full bg-orange-500" />
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-orange-500 text-white font-extrabold text-[10px] tracking-tighter">
+              G2
+            </span>
             <span>Listed on <strong>G2</strong></span>
           </a>
 
-          {/* Capterra Badge */}
+          {/* Capterra Badge with Icon */}
           <a
             href="https://capterra.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-sky-500/60 text-slate-200 text-xs font-medium transition-all"
+            className="inline-flex items-center gap-2.5 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-sky-500/60 text-slate-200 text-xs font-medium transition-all"
           >
-            <span className="w-2 h-2 rounded-full bg-sky-400" />
+            <svg className="w-4 h-4 text-sky-400" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M2 3l20 7.5L13.5 14 10 22 2 3z" />
+            </svg>
             <span>Verified on <strong>Capterra</strong></span>
           </a>
 
-          {/* Trustpilot Badge */}
+          {/* Trustpilot Badge with Star Icon */}
           <a
             href="https://trustpilot.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-emerald-500/60 text-slate-200 text-xs font-medium transition-all"
+            className="inline-flex items-center gap-2.5 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-emerald-500/60 text-slate-200 text-xs font-medium transition-all"
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-emerald-500 text-white">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+            </span>
             <span>Review us on <strong>Trustpilot</strong></span>
           </a>
 
-          {/* GetApp Badge */}
+          {/* GetApp Badge with Icon */}
           <a
             href="https://g2.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-indigo-500/60 text-slate-200 text-xs font-medium transition-all"
+            className="inline-flex items-center gap-2.5 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-indigo-500/60 text-slate-200 text-xs font-medium transition-all"
           >
-            <span className="w-2 h-2 rounded-full bg-indigo-400" />
+            <svg className="w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 3.5L16.5 13 20 16.5 16.5 20 13 16.5z" />
+            </svg>
             <span>Featured on <strong>GetApp</strong></span>
           </a>
         </div>
@@ -190,6 +195,12 @@ export default function Landing() {
     </div>
   </div>
 </div>
+
+        <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-16 py-10 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between text-sm text-slate-500">
+          <Brand />
+          <Link to="/contact" className="hover:text-emerald-300" data-testid="landing-footer-contact-link">Contact Support & Sales</Link>
+          <span>© {new Date().getFullYear()} LedgerStream AI. Built for bookkeeping firms.</span>
+        </div>
 
       </footer>
     </div>
