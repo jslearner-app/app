@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, FileSpreadsheet, Scale } from "lucide-react";
 import { Brand } from "@/components/common/Brand";
@@ -28,9 +28,14 @@ const MODULES = [
 
 export default function Landing() {
   const { user } = useAuth();
+  const trustboxRef = useRef(null);
   const ctaTo = user ? "/dashboard" : "/register";
+
   useEffect(() => {
     document.title = PAGE_TITLE;
+    if (window.Trustpilot && trustboxRef.current) {
+      window.Trustpilot.loadFromElement(trustboxRef.current, true);
+    }
   }, []);
   return (
     <div className="min-h-screen bg-background" data-testid="landing-page">
@@ -233,7 +238,27 @@ export default function Landing() {
   </div>
 </section>
 
-        
+        {/* TrustBox widget - Review Collector */}
+<div
+  ref={trustboxRef}
+  className="trustpilot-widget my-6"
+  data-locale="en-US"
+  data-template-id="56278e9abfbbba0bdcd568bc"
+  data-businessunit-id="6af7f747a7dbf30ad4d20652"
+  data-style-height="52px"
+  data-style-width="100%"
+  data-theme="dark"
+>
+  <a
+    href="https://trustpilot.com"
+    target="_blank"
+    rel="noopener noreferrer"
+  >
+    Trustpilot
+  </a>
+</div>
+{/* End TrustBox widget */}
+
 
         {/* Verified Software Directory Scrolling Marquee */}
 <div className="mt-8 pt-6 border-t border-slate-800/80 overflow-hidden">
