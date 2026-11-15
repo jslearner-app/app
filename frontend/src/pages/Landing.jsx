@@ -110,6 +110,131 @@ export default function Landing() {
 
       <footer className="border-t border-slate-800/70">
 
+
+        {/* Supported Global Banks & Payout Platforms Scrolling Marquee */}
+<section className="py-16 border-t border-slate-800/80 overflow-hidden">
+  <style>{`
+    @keyframes bankScrollLeft {
+      0% { transform: translateX(0%); }
+      100% { transform: translateX(-50%); }
+    }
+    .animate-bank-row-1 {
+      display: flex;
+      width: max-content;
+      animation: bankScrollLeft 34s linear infinite;
+    }
+    .animate-bank-row-2 {
+      display: flex;
+      width: max-content;
+      animation: bankScrollLeft 28s linear infinite;
+    }
+    .animate-bank-row-1:hover,
+    .animate-bank-row-2:hover {
+      animation-play-state: paused;
+    }
+  `}</style>
+
+  <div className="text-center max-w-3xl mx-auto px-4 mb-10">
+    <span className="inline-block px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-400 text-xs font-semibold uppercase tracking-wider mb-3">
+      Global Coverage · Zero Bank Logins Required
+    </span>
+    <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+      Works With Major Banks &amp; Payout Platforms Worldwide
+    </h2>
+    <p className="mt-2.5 text-sm text-slate-400">
+      Multi-page PDF extraction &amp; automated fee splitting across the US, UK, Canada, Australia, and the EU.
+    </p>
+  </div>
+
+  {/* Row 1: Global Banks Scrolling Right-to-Left */}
+  <div className="relative w-full overflow-hidden mb-4">
+    <div className="animate-bank-row-1">
+      {[0, 1].map((loopIdx) => (
+        <div key={loopIdx} className="flex items-center gap-3.5 pr-3.5">
+          {[
+            { name: "Chase", region: "US", badge: "CH", color: "bg-blue-600" },
+            { name: "Bank of America", region: "US", badge: "BA", color: "bg-red-600" },
+            { name: "Wells Fargo", region: "US", badge: "WF", color: "bg-amber-600" },
+            { name: "American Express", region: "US/Global", badge: "AX", color: "bg-sky-600" },
+            { name: "Mercury", region: "US", badge: "MC", color: "bg-indigo-600" },
+            { name: "Barclays", region: "UK", badge: "BC", color: "bg-cyan-600" },
+            { name: "HSBC", region: "UK/Global", badge: "HS", color: "bg-red-600" },
+            { name: "Lloyds Bank", region: "UK", badge: "LB", color: "bg-emerald-600" },
+            { name: "NatWest", region: "UK", badge: "NW", color: "bg-purple-600" },
+            { name: "Monzo Business", region: "UK", badge: "MZ", color: "bg-rose-500" },
+            { name: "Tide", region: "UK", badge: "TD", color: "bg-blue-500" },
+            { name: "BNP Paribas", region: "EU", badge: "BP", color: "bg-emerald-600" },
+            { name: "ING Bank", region: "EU", badge: "IN", color: "bg-orange-500" },
+            { name: "Deutsche Bank", region: "EU", badge: "DB", color: "bg-blue-700" },
+            { name: "Wise Business", region: "EU/UK", badge: "WS", color: "bg-lime-600" },
+            { name: "Revolut Business", region: "EU/UK", badge: "RV", color: "bg-slate-600" },
+            { name: "Qonto", region: "EU", badge: "QT", color: "bg-violet-600" },
+            { name: "RBC Royal Bank", region: "CA", badge: "RB", color: "bg-blue-600" },
+            { name: "TD Bank", region: "CA/US", badge: "TD", color: "bg-green-600" },
+            { name: "Scotiabank", region: "CA", badge: "SB", color: "bg-red-600" },
+            { name: "CommBank", region: "AU", badge: "CB", color: "bg-yellow-500 text-slate-950" },
+            { name: "Westpac", region: "AU", badge: "WP", color: "bg-red-600" },
+            { name: "ANZ Bank", region: "AU/NZ", badge: "AZ", color: "bg-sky-600" },
+          ].map((bank) => (
+            <div
+              key={`${loopIdx}-${bank.name}`}
+              className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-600 transition-colors"
+            >
+              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-[10px] font-bold text-white shadow-sm ${bank.color}`}>
+                {bank.badge}
+              </span>
+              <span className="text-xs font-semibold text-slate-200 whitespace-nowrap">{bank.name}</span>
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                {bank.region}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  </div>
+
+  {/* Row 2: Merchant & Delivery Payout Platforms Scrolling Right-to-Left */}
+  <div className="relative w-full overflow-hidden">
+    <div className="animate-bank-row-2">
+      {[0, 1].map((loopIdx) => (
+        <div key={loopIdx} className="flex items-center gap-3.5 pr-3.5">
+          {[
+            { name: "Stripe Payouts", badge: "S", color: "bg-indigo-600" },
+            { name: "Shopify Payments", badge: "SH", color: "bg-emerald-600" },
+            { name: "Square POS", badge: "SQ", color: "bg-slate-700" },
+            { name: "PayPal", badge: "PP", color: "bg-blue-600" },
+            { name: "Amazon Seller", badge: "AZ", color: "bg-amber-500 text-slate-950" },
+            { name: "Etsy", badge: "ET", color: "bg-orange-600" },
+            { name: "Toast POS", badge: "TS", color: "bg-orange-500" },
+            { name: "Clover", badge: "CL", color: "bg-green-600" },
+            { name: "DoorDash", badge: "DD", color: "bg-red-600" },
+            { name: "UberEats", badge: "UE", color: "bg-emerald-500 text-slate-950" },
+            { name: "Deliveroo", badge: "DL", color: "bg-teal-500 text-slate-950" },
+            { name: "Just Eat", badge: "JE", color: "bg-orange-500" },
+            { name: "Airbnb Host", badge: "AB", color: "bg-rose-500" },
+          ].map((platform) => (
+            <div
+              key={`${loopIdx}-${platform.name}`}
+              className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-slate-900/90 border border-emerald-900/50 hover:border-emerald-500/50 transition-colors"
+            >
+              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-[10px] font-bold text-white shadow-sm ${platform.color}`}>
+                {platform.badge}
+              </span>
+              <span className="text-xs font-semibold text-emerald-100 whitespace-nowrap">{platform.name}</span>
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400">
+                Fee Split
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+        
+
         {/* Verified Software Directory Scrolling Marquee */}
 <div className="mt-8 pt-6 border-t border-slate-800/80 overflow-hidden">
   <style>{`
