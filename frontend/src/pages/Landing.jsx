@@ -238,27 +238,6 @@ export default function Landing() {
   </div>
 </section>
 
-        {/* TrustBox widget - Review Collector */}
-<div
-  ref={trustboxRef}
-  className="trustpilot-widget my-6"
-  data-locale="en-US"
-  data-template-id="56278e9abfbbba0bdcd568bc"
-  data-businessunit-id="6af7f747a7dbf30ad4d20652"
-  data-style-height="52px"
-  data-style-width="100%"
-  data-theme="dark"
->
-  <a
-    href="https://trustpilot.com"
-    target="_blank"
-    rel="noopener noreferrer"
-  >
-    Trustpilot
-  </a>
-</div>
-{/* End TrustBox widget */}
-
 
         {/* Verified Software Directory Scrolling Marquee */}
 <div className="mt-8 pt-6 border-t border-slate-800/80 overflow-hidden">
@@ -289,7 +268,8 @@ export default function Landing() {
         <div key={loopIndex} className="flex items-center gap-4 pr-4">
           {/* G2 Badge with Icon */}
           <a
-            href="https://g2.com"
+            href="href="https://www.g2.com/contributor/ledgerstream-ai-review-collection-eaa75080-2389-494b-ab24-a3db5c3ef4ff"
+"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2.5 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-orange-500/60 text-slate-200 text-xs font-medium transition-all"
@@ -302,7 +282,7 @@ export default function Landing() {
 
           {/* Capterra Badge with Icon */}
           <a
-            href="https://capterra.com"
+            href="https://www.capterra.com/p/10286660/LedgerStream-AI/"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2.5 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-sky-500/60 text-slate-200 text-xs font-medium transition-all"
@@ -313,6 +293,18 @@ export default function Landing() {
             <span>Verified on <strong>Capterra</strong></span>
           </a>
 
+      {/* Software Advice Badge */}
+          <a
+            href="https://www.softwareadvice.com/product/793983-LedgerStream-AI/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2.5 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-amber-500/60 text-slate-200 text-xs font-medium transition-all"
+          >
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-amber-500 text-slate-950 font-extrabold text-[10px] tracking-tighter">
+              SA
+            </span>
+            <span>Listed on <strong>Software Advice</strong></span>
+          </a>
           {/* Trustpilot Badge with Star Icon */}
           <a
             href="https://trustpilot.com"
@@ -330,7 +322,7 @@ export default function Landing() {
 
           {/* GetApp Badge with Icon */}
           <a
-            href="https://g2.com"
+            href="https://www.getapp.com/all-software/a/ledgerstream-ai/"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2.5 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-indigo-500/60 text-slate-200 text-xs font-medium transition-all"
