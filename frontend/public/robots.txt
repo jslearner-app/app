@@ -6,3 +6,5 @@ Disallow: /history
 Disallow: /billing
 Disallow: /pricing
 Disallow: /payment/
+
+Sitemap: https://ledgerstreamai.com
