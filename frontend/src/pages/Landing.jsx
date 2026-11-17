@@ -303,10 +303,9 @@ export default function Landing() {
     <div className="animate-ledger-marquee gap-4">
       {[0, 1].map((loopIndex) => (
         <div key={loopIndex} className="flex items-center gap-4 pr-4">
-          {/* G2 Badge with Icon */}
+                   {/* G2 Badge with Icon */}
           <a
-            href="href="https://www.g2.com/contributor/ledgerstream-ai-review-collection-eaa75080-2389-494b-ab24-a3db5c3ef4ff"
-"
+            href="https://www.g2.com/contributor/ledgerstream-ai-review-collection-eaa75080-2389-494b-ab24-a3db5c3ef4ff"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2.5 px-4 py-2 rounded-lg bg-slate-900/90 border border-slate-700/80 hover:border-orange-500/60 text-slate-200 text-xs font-medium transition-all"
@@ -330,7 +329,7 @@ export default function Landing() {
             <span>Verified on <strong>Capterra</strong></span>
           </a>
 
-      {/* Software Advice Badge */}
+          {/* Software Advice Badge */}
           <a
             href="https://www.softwareadvice.com/product/793983-LedgerStream-AI/"
             target="_blank"
@@ -342,6 +341,7 @@ export default function Landing() {
             </span>
             <span>Listed on <strong>Software Advice</strong></span>
           </a>
+
           {/* Trustpilot Badge with Star Icon */}
           <a
             href="https://trustpilot.com"
