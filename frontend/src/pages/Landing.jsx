@@ -153,7 +153,7 @@ export default function Landing() {
   </div>
 </section>
 
-        
+      
         {/* Supported Global Banks & Payout Platforms Scrolling Marquee */}
 <section className="py-16 border-t border-slate-800/80 overflow-hidden">
   <style>{`
