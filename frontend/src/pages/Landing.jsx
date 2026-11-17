@@ -79,7 +79,38 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Built for Skeptical Bookkeepers Reassurance Strip */}
+      
+      <section className="px-5 sm:px-8 lg:px-16 py-14 max-w-7xl mx-auto" data-testid="landing-trust-badges-section">
+        <p className="text-xs uppercase tracking-[0.18em] text-slate-500 mb-6">Works with your clients' platforms</p>
+        <TrustBadgesRow />
+      </section>
+
+      <Section id="modules" eyebrow="Two modules, one dashboard" title="Everything a cleanup engagement needs" testId="landing-modules-section">
+        <div className="grid gap-6 lg:grid-cols-2">
+          {MODULES.map((m) => (
+            <div key={m.title} className="surface p-6 sm:p-8">
+              <m.icon className="h-6 w-6 text-emerald-400" />
+              <h3 className="mt-5 text-xl font-semibold text-slate-50">{m.title}</h3>
+              <p className="mt-2 text-slate-400">{m.text}</p>
+              <div className="mt-6 flex flex-wrap gap-2">
+                {m.cols.map((c) => <span key={c} className="rounded-md border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs text-slate-300 font-mono">{c}</span>)}
+              </div>
+              <div className="mt-6 pt-5 border-t border-slate-800 text-sm text-emerald-300">Deliverable: {m.out}</div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section id="use-cases" eyebrow="Financial utilities for bookkeepers" title="Use Cases" sub="From PDF bank statement conversion to QuickBooks Online payout splitting, one hub handles every ingestion job." testId="landing-use-cases-section">
+        <UseCases />
+      </Section>
+
+      <Section id="trust" eyebrow="Peer proof" title="Real firms. Real backlogs. Exact pennies." sub="Bookkeepers trust the math because every journal entry is validated to balance before export." testId="landing-trust-section">
+        <CaseStudyReviews />
+        <div className="mt-10"><SecurityStrip /></div>
+      </Section>
+
+            {/* Built for Skeptical Bookkeepers Reassurance Strip */}
 <section className="px-5 sm:px-8 lg:px-16 py-10 max-w-6xl mx-auto">
   <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-6 sm:p-8">
     <div className="text-center max-w-2xl mx-auto mb-6">
@@ -115,38 +146,7 @@ export default function Landing() {
     </div>
   </div>
 </section>
-
       
-      <section className="px-5 sm:px-8 lg:px-16 py-14 max-w-7xl mx-auto" data-testid="landing-trust-badges-section">
-        <p className="text-xs uppercase tracking-[0.18em] text-slate-500 mb-6">Works with your clients' platforms</p>
-        <TrustBadgesRow />
-      </section>
-
-      <Section id="modules" eyebrow="Two modules, one dashboard" title="Everything a cleanup engagement needs" testId="landing-modules-section">
-        <div className="grid gap-6 lg:grid-cols-2">
-          {MODULES.map((m) => (
-            <div key={m.title} className="surface p-6 sm:p-8">
-              <m.icon className="h-6 w-6 text-emerald-400" />
-              <h3 className="mt-5 text-xl font-semibold text-slate-50">{m.title}</h3>
-              <p className="mt-2 text-slate-400">{m.text}</p>
-              <div className="mt-6 flex flex-wrap gap-2">
-                {m.cols.map((c) => <span key={c} className="rounded-md border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs text-slate-300 font-mono">{c}</span>)}
-              </div>
-              <div className="mt-6 pt-5 border-t border-slate-800 text-sm text-emerald-300">Deliverable: {m.out}</div>
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      <Section id="use-cases" eyebrow="Financial utilities for bookkeepers" title="Use Cases" sub="From PDF bank statement conversion to QuickBooks Online payout splitting, one hub handles every ingestion job." testId="landing-use-cases-section">
-        <UseCases />
-      </Section>
-
-      <Section id="trust" eyebrow="Peer proof" title="Real firms. Real backlogs. Exact pennies." sub="Bookkeepers trust the math because every journal entry is validated to balance before export." testId="landing-trust-section">
-        <CaseStudyReviews />
-        <div className="mt-10"><SecurityStrip /></div>
-      </Section>
-
       <Section id="pricing" eyebrow="Pricing" title="Start free. Upgrade when the backlog is real." sub="Your first 5 statement pages are on us." testId="landing-pricing-section">
         <PricingMatrix publicMode />
       </Section>
