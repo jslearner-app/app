@@ -114,43 +114,6 @@ export default function Landing() {
       </Section>
 
       <footer className="border-t border-slate-800/70">
-        {/* Built for Skeptical Bookkeepers Reassurance Strip */}
-        <section className="px-5 sm:px-8 lg:px-16 py-10 max-w-6xl mx-auto">
-          <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-6 sm:p-8">
-            <div className="text-center max-w-2xl mx-auto mb-6">
-              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-                Built for Skeptical Bookkeepers &amp; CPAs
-              </span>
-              <h3 className="mt-1.5 text-xl sm:text-2xl font-bold text-white">
-                No Hallucinated Pennies. No Client Bank Logins. No Wasted Audit Time.
-              </h3>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
-              <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800/80">
-                <div className="text-sm font-semibold text-white mb-1">1. Zero Client Bank Credentials</div>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Never link live client bank feeds or store passwords. Upload standard PDFs or redacted statements inside an isolated firm workspace.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800/80">
-                <div className="text-sm font-semibold text-white mb-1">2. Deterministic $0.00 Math Check</div>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Unlike generic AI that guesses numbers, our engine verifies total debits equal total credits to the exact cent before export.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800/80">
-                <div className="text-sm font-semibold text-white mb-1">3. Audit-Ready QBO &amp; Xero Exports</div>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Stop spending hours fixing shifted OCR columns or manually splitting Stripe, Shopify, Toast, LawPay, and Deliveroo payout fees in Excel.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
       
         {/* Supported Global Banks & Payout Platforms Scrolling Marquee */}
 <section className="py-16 border-t border-slate-800/80 overflow-hidden">
